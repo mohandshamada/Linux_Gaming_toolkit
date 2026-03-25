@@ -1,6 +1,9 @@
-# 🎮 Linux Gaming Toolkit
+# 🎮 Linux Gaming Toolkit v3.4
 
 Transform any Linux distribution into a gaming powerhouse with this comprehensive setup script.
+
+![Version](https://img.shields.io/badge/version-3.4-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
 
@@ -63,11 +66,37 @@ Transform any Linux distribution into a gaming powerhouse with this comprehensiv
    - Check for latest Mesa versions
    - Check for latest Wine versions
 
-7. **Safety & Reliability**
-   - **Safer Bash**: `set -Eeuo pipefail` with error trapping
-   - **Line number reporting**: Shows exactly where errors occur
-   - **Logging with /tmp fallback**: Works even if /var/log is not writable
-   - **Whiptail GUI**: Optional graphical menu (installs automatically on Debian/Ubuntu)
+7. **🆕 HDR & Advanced Display Support (v3.4)**
+   - **HDR Support**: Gamescope HDR patches, Mesa HDR enablement
+   - **Dolby Vision**: Enable Dolby Vision on compatible displays
+   - **OLED Protection**: Auto-dimming, pixel shifting, taskbar detection
+
+8. **🆕 Nobara-Inspired Extra Features (v3.4)**
+   - **auto-cpufreq**: Automatic CPU frequency scaling
+   - **LACT**: Linux AMD GPU control tool
+   - **Wootility**: Wooting keyboard configuration
+   - **asusctl/supergfxctl**: ASUS device control
+   - **piper**: Gaming mouse configuration
+
+9. **🆕 Advanced Graphics Configuration (v3.4)**
+   - FSR (FidelityFX Super Resolution) support
+   - LatencyFleX for reduced input lag
+   - VR runtime setup (OpenComposite, ALVR)
+   - Game controller support and configuration
+
+10. **Safety & Reliability**
+    - **Safer Bash**: `set -Eeuo pipefail` with error trapping
+    - **Line number reporting**: Shows exactly where errors occur
+    - **Logging with /tmp fallback**: Works even if /var/log is not writable
+    - **Whiptail GUI**: Optional graphical menu (installs automatically on Debian/Ubuntu)
+    - **Idempotent operations**: Safe to run multiple times - checks before modifying configs
+    - **Backup system**: All modified files backed up with `.backup.*` extension
+
+11. **Complete Uninstallation**
+    - `uninstall.sh` script to revert all changes
+    - Automatic backup restoration
+    - Repository cleanup
+    - Package removal tracking
 
 ## Supported Distributions
 
@@ -87,8 +116,8 @@ Transform any Linux distribution into a gaming powerhouse with this comprehensiv
 ### 1. Clone or Download
 
 ```bash
-git clone https://github.com/yourusername/linux-gaming-toolkit.git
-cd linux-gaming-toolkit
+git clone https://github.com/mohandshamada/Linux_Gaming_toolkit.git
+cd Linux_Gaming_toolkit
 ```
 
 ### 2. Make Executable
@@ -106,8 +135,25 @@ sudo ./gamingtoolkit.sh
 ### 4. Choose Your Setup
 
 The script presents a menu:
-- **Option 1**: Full automatic setup (recommended)
-- **Options 2-10**: Individual components
+
+| Option | Description |
+|--------|-------------|
+| **1** | 🚀 Full automatic setup (recommended) |
+| **2** | 📦 Install Gaming Packages Only |
+| **3** | 🐧 Install Gaming Kernel |
+| **4** | 🎨 Install GPU Drivers |
+| **5** | ⚙️ Apply System Optimizations Only |
+| **6** | 🔥 Configure CPU Governor |
+| **7** | ⚠️ Disable CPU Mitigations (Security Risk) |
+| **8** | 📊 Configure MangoHud |
+| **9** | 🎲 Configure GameMode |
+| **10** | 🛠️ Install Additional Tools (Discord, itch.io) |
+| **11** | 🌐 Check for Latest Drivers Online |
+| **12** | 🌈 Install HDR & Dolby Vision Support |
+| **13** | 🖥️ Install OLED Protection Tools |
+| **14** | 🎮 Install Nobara Extra Features |
+| **15** | 🔧 Configure Advanced Graphics |
+| **0** | 🚪 Exit |
 
 ## What Gets Installed
 
@@ -150,15 +196,47 @@ The script presents a menu:
 | **Waydroid** | Android container for mobile games |
 | **r2modman** | Mod manager for games |
 
+### HDR & Display Features (v3.4)
+
+| Package | Purpose |
+|---------|---------|
+| **Gamescope HDR** | HDR support in Gamescope |
+| **Mesa HDR** | Mesa HDR patches for AMD/Intel |
+| **Dolby Vision** | Enable Dolby Vision on compatible displays |
+| **OLED Protection** | Auto-dimming and pixel shifting tools |
+
+### Nobara-Inspired Tools (v3.4)
+
+| Package | Purpose |
+|---------|---------|
+| **auto-cpufreq** | Automatic CPU frequency scaling |
+| **LACT** | Linux AMD GPU control tool |
+| **Wootility** | Wooting keyboard configuration |
+| **asusctl** | ASUS laptop control |
+| **supergfxctl** | ASUS GPU switching |
+| **piper** | Gaming mouse configuration |
+
 ## Smart Package Management
 
-The toolkit now includes intelligent package handling:
+The toolkit includes intelligent package handling:
 
 ### Check Before Installing
 - Each package is checked before installation
 - Already installed packages are skipped automatically
 - No duplicate installations
 - Faster re-runs
+
+### Idempotent Configuration
+- All config modifications check before adding
+- GRUB parameters only added if not present
+- Repository configurations are idempotent
+- Safe to run the script multiple times
+
+### Backup System
+- All modified files backed up with `.backup.*` extension
+- Backups stored in same directory as original file
+- Automatic restore on uninstall
+- Never lose your original configuration
 
 ### Latest Driver Detection
 
@@ -191,6 +269,21 @@ This will check:
 - Latest NVIDIA driver from official NVIDIA servers
 - Latest Mesa version for AMD/Intel
 - Latest Wine development version
+
+## Uninstallation
+
+To completely remove all changes made by the toolkit:
+
+```bash
+sudo ./uninstall.sh
+```
+
+The uninstall script will:
+- Remove all installed gaming packages
+- Restore original configuration files from backups
+- Remove added repositories
+- Revert sysctl and kernel parameter changes
+- Provide instructions for removing gaming kernels
 
 ## Usage After Installation
 
@@ -254,6 +347,38 @@ This shows:
 - **Best for**: Maximum performance on Arch
 - **Features**: BORE scheduler, LRU patchset, x86-64-v3/v4 optimizations
 
+## HDR & Advanced Display Setup
+
+### Enabling HDR (v3.4)
+
+```bash
+sudo ./gamingtoolkit.sh
+# Select option 12: Install HDR & Dolby Vision Support
+```
+
+Requirements:
+- HDR-compatible display
+- AMD GPU: Mesa 24.0+ with HDR patches
+- NVIDIA GPU: Proprietary drivers 550.54.14+
+- Gamescope for HDR in windowed mode
+
+### OLED Protection (v3.4)
+
+```bash
+sudo ./gamingtoolkit.sh
+# Select option 13: Install OLED Protection Tools
+```
+
+Features:
+- Auto-dimming after idle time
+- Pixel shifting to prevent burn-in
+- Taskbar detection and protection
+- ASUS OLED device support (asusctl)
+
+### Dolby Vision (v3.4)
+
+For compatible displays, the toolkit can enable Dolby Vision support through kernel parameters and Mesa patches (AMD/Intel).
+
 ## Configuration Files
 
 After installation, you can customize:
@@ -264,6 +389,7 @@ After installation, you can customize:
 | `~/.config/MangoHud/MangoHud.conf` | MangoHud overlay appearance |
 | `~/.gamingrc` | Environment variables (source in shell) |
 | `/etc/sysctl.d/99-gaming.conf` | Kernel parameters |
+| `/etc/default/grub` | Boot parameters (with .backup backup) |
 
 ## CPU Mitigations Warning
 
@@ -337,6 +463,23 @@ grep . /sys/devices/system/cpu/vulnerabilities/*
    sudo usermod -aG input $USER
    ```
 
+### HDR Not Working
+
+1. Check HDR support:
+   ```bash
+   vulkaninfo | grep HDR
+   ```
+
+2. Verify Gamescope HDR:
+   ```bash
+   gamescope --help | grep hdr
+   ```
+
+3. Check kernel parameters:
+   ```bash
+   cat /proc/cmdline | grep nvidia-drm.modeset
+   ```
+
 ## Advanced Usage
 
 ### Custom GameMode Configuration
@@ -388,6 +531,7 @@ Key variables:
 - `RADV_PERFTEST=aco` - Enable ACO shader compiler
 - `WINEESYNC=1` - Enable ESYNC for Wine
 - `WINEFSYNC=1` - Enable FSYNC for Wine
+- `ENABLE_HDR_WSI=1` - Enable HDR support
 
 ## Benchmark Results
 
@@ -403,6 +547,50 @@ Typical improvements on a mid-range gaming PC:
 
 *Results vary by hardware and game*
 
+## Version History
+
+### v3.4 - HDR & Nobara Features
+- Added HDR support (Gamescope, Mesa patches)
+- Added Dolby Vision support
+- Added OLED protection tools
+- Added Nobara-inspired packages (auto-cpufreq, LACT, Wootility)
+- Added advanced graphics configuration
+
+### v3.3 - Code Review & Refactoring
+- Removed duplicate functions
+- Added idempotency checks
+- Rewrote uninstall.sh with backup restore
+- Fixed winetricks user context
+- Started modularization (modules/utils.sh, modules/detection.sh)
+
+### v3.2 - NVIDIA Open Modules
+- Added NVIDIA open kernel modules option
+- GPU generation detection
+- Support for Turing RTX 20+ GPUs
+
+### v3.1 - Community Features
+- Added itch.io, Discord, VKD3D-Proton
+- Added Bottles, Prism Launcher, RetroArch
+- Added SteamTinkerLaunch, GreenWithEnvy
+- Added PipeWire, SOBER, Waydroid, r2modman
+
+### v3.0 - Initial Release
+- Core gaming toolkit
+- Steam, Lutris, Wine, GameMode, MangoHud
+
+## Project Structure
+
+```
+Linux_Gaming_toolkit/
+├── gamingtoolkit.sh    # Main script (3000+ lines)
+├── uninstall.sh        # Uninstall/restore script
+├── README.md          # This file
+├── modules/
+│   ├── utils.sh       # Utility functions
+│   └── detection.sh   # Hardware detection
+└── backups/           # Configuration backups
+```
+
 ## Contributing
 
 Pull requests welcome! Areas for improvement:
@@ -410,6 +598,7 @@ Pull requests welcome! Areas for improvement:
 - More kernel options
 - Better GPU detection
 - Additional gaming tools
+- HDR display detection
 
 ## License
 
@@ -422,6 +611,8 @@ MIT License - See LICENSE file
 - XanMod, Liquorix, Zen, and CachyOS kernel teams
 - Feral Interactive for GameMode
 - FlightlessMango for MangoHud
+- Nobara Project for inspiration
+- GloriousEggroll for GE-Proton and Gamescope patches
 
 ## Resources
 
@@ -429,6 +620,7 @@ MIT License - See LICENSE file
 - [Lutris](https://lutris.net/) - Game installer scripts
 - [GamingOnLinux](https://www.gamingonlinux.com/) - News and guides
 - [r/linux_gaming](https://reddit.com/r/linux_gaming) - Community support
+- [Nobara Project](https://nobaraproject.org/) - Gaming-focused Fedora
 
 ---
 
