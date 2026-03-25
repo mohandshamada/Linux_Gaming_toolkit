@@ -867,11 +867,32 @@ install_debian_gaming_packages() {
     
     # Wine (try different package names)
     if ! package_installed wine && ! package_installed wine64; then
-        print_info "Installing Wine..."
-        apt install -y wine64 wine32 winetricks 2>/dev/null || apt install -y wine winetricks || true
+        print_info "Installing Wine with Gecko and Mono..."
+        apt install -y wine64 wine32 winetricks wine-gecko wine-mono 2>/dev/null || \
+        apt install -y wine winetricks 2>/dev/null || \
+        apt install -y wine-stable winetricks || true
     else
         print_info "Wine already installed"
+        # Try to install gecko and mono anyway
+        install_packages wine-gecko wine-mono || true
     fi
+    
+    # Install additional 32-bit libraries for better game compatibility
+    print_info "Installing 32-bit libraries..."
+    install_packages \
+        lib32-gnutls3:i386 \
+        lib32-libx11-6:i386 \
+        lib32-libxext6:i386 \
+        lib32-libxrender1:i386 \
+        lib32-libxi6:i386 \
+        lib32-libxcb1:i386 \
+        lib32-libxdmcp6:i386 \
+        lib32-libxrandr2:i386 \
+        lib32-libpulse0:i386 \
+        lib32-alsa2:i386 \
+        lib32-dbus-1-3:i386 \
+        libc6:i386 \
+        libncurses6:i386 || true
     
     install_packages \
         mangohud \
@@ -880,12 +901,21 @@ install_debian_gaming_packages() {
         lutris \
         vulkan-tools \
         vulkan-validationlayers \
-        mesa-utils
+        mesa-utils \
+        xpad \
+        joystick
     
     # Optional packages
     install_packages corectrl || print_info "corectrl not available, skipping"
     install_packages goverlay || print_info "goverlay not available, skipping"
     install_packages gamescope || print_info "gamescope not available, skipping"
+    
+    # Configure winetricks with essential components
+    if command_exists winetricks; then
+        print_info "Configuring Wine with Winetricks (corefonts, dxvk)..."
+        # Create a temporary user to run winetricks without X
+        WINEARCH=win32 winetricks --unattended corefonts dxvk vcrun2019 2>/dev/null || true
+    fi
     
     # Install ProtonUp-Qt
     install_protonupqt
@@ -918,7 +948,32 @@ install_fedora_gaming_packages() {
         mesa-demos \
         corectrl \
         goverlay \
-        gamescope
+        gamescope \
+        xpad \
+        joystick
+    
+    # 32-bit libraries for game compatibility
+    install_packages \
+        wine.i686 \
+        gnutls.i686 \
+        libX11.i686 \
+        libXext.i686 \
+        libXrender.i686 \
+        libXi.i686 \
+        libXcb.i686 \
+        libXdmcp.i686 \
+        libXrandr.i686 \
+        pulseaudio-libs.i686 \
+        alsa-lib.i686 \
+        dbus-libs.i686 \
+        ncurses-libs.i686 \
+        vulkan-loader.i686 || true
+    
+    # Configure Wine with Winetricks
+    if command_exists winetricks; then
+        print_info "Configuring Wine with Winetricks..."
+        winetricks --unattended corefonts dxvk vcrun2019 2>/dev/null || true
+    fi
     
     # Optional packages
     install_packages vkBasalt || print_info "vkBasalt not available, skipping"
@@ -934,9 +989,11 @@ install_arch_gaming_packages() {
     # Update system first to get latest packages
     pacman -Sy
     
-    # Core gaming packages
+    # Core gaming packages with Wine Gecko and Mono for browser/game compatibility
     install_packages \
         wine \
+        wine-gecko \
+        wine-mono \
         winetricks \
         gamemode \
         lib32-gamemode \
@@ -954,7 +1011,30 @@ install_arch_gaming_packages() {
         vkBasalt \
         lib32-vkBasalt \
         obs-studio \
-        discord
+        discord \
+        xpadneo-dkms \
+        joystick
+    
+    # Additional 32-bit libraries for better game compatibility
+    install_packages \
+        lib32-gnutls \
+        lib32-libx11 \
+        lib32-libxext \
+        lib32-libxrender \
+        lib32-libxi \
+        lib32-libxcb \
+        lib32-libxdmcp \
+        lib32-libxrandr \
+        lib32-libpulse \
+        lib32-alsa-lib \
+        lib32-dbus \
+        lib32-ncurses || true
+    
+    # Configure Wine with essential Winetricks components
+    if command_exists winetricks; then
+        print_info "Configuring Wine with Winetricks..."
+        winetricks --unattended corefonts dxvk vcrun2019 2>/dev/null || true
+    fi
     
     # Install from AUR if helper available
     if command_exists yay || command_exists paru; then
@@ -1677,11 +1757,225 @@ install_discord() {
     
     # Fallback to Flatpak
     if command_exists flatpak; then
-        if ! flatpak list | grep -q discord 2>/dev/null; then
+        if ! flatpak list 2>/dev/null | grep -q discord; then
             print_info "Installing Discord via Flatpak..."
             flatpak install -y flathub com.discordapp.Discord
         fi
     fi
+}
+
+install_pipewire() {
+    print_section "🔊 Installing PipeWire Audio Server"
+    
+    case "$DISTRO_FAMILY" in
+        debian|ubuntu)
+            install_packages \
+                pipewire \
+                pipewire-audio-client-libraries \
+                wireplumber \
+                pipewire-alsa \
+                pipewire-pulse \
+                pipewire-jack \
+                libspa-0.2-bluetooth
+            
+            # Enable PipeWire services
+            systemctl --global enable pipewire wireplumber 2>/dev/null || true
+            ;;
+        fedora)
+            # Fedora 34+ uses PipeWire by default
+            print_info "Fedora uses PipeWire by default"
+            install_packages pipewire-alsa pipewire-jack pipewire-pulseaudio
+            ;;
+        arch)
+            install_packages \
+                pipewire \
+                wireplumber \
+                pipewire-alsa \
+                pipewire-pulse \
+                pipewire-jack
+            
+            # Enable services
+            systemctl --global enable pipewire wireplumber 2>/dev/null || true
+            ;;
+        suse)
+            install_packages pipewire wireplumber pipewire-alsa pipewire-pulse
+            ;;
+    esac
+    
+    print_success "PipeWire audio server installed"
+}
+
+install_bottles() {
+    print_section "🍷 Installing Bottles (Wine Prefix Manager)"
+    
+    # Bottles is best installed via Flatpak
+    if command_exists flatpak; then
+        if ! flatpak list 2>/dev/null | grep -q bottles; then
+            flatpak install -y flathub com.usebottles.bottles
+            print_success "Bottles installed via Flatpak"
+        else
+            print_info "Bottles already installed"
+        fi
+    else
+        print_warning "Flatpak not available. Bottles requires Flatpak."
+    fi
+}
+
+install_prism_launcher() {
+    print_section "⛏️ Installing Prism Launcher (Minecraft)"
+    
+    case "$DISTRO_FAMILY" in
+        debian|ubuntu)
+            # Add Prism Launcher PPA
+            if ! grep -q "prismlauncher" /etc/apt/sources.list.d/*.list 2>/dev/null; then
+                print_info "Adding Prism Launcher repository..."
+                curl -q 'https://proget.makedeb.org/debian-feeds/prebuilt-mpr.pub' | gpg --dearmor | tee /usr/share/keyrings/prebuilt-mpr-archive-keyring.gpg 1> /dev/null
+                echo "deb [signed-by=/usr/share/keyrings/prebuilt-mpr-archive-keyring.gpg] https://proget.makedeb.org/prebuilt-mpr $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/prebuilt-mpr.list
+                apt update
+            fi
+            install_packages prismlauncher || true
+            ;;
+        fedora)
+            # Available in COPR
+            if ! rpm -qa | grep -q prismlauncher; then
+                print_info "Adding Prism Launcher COPR..."
+                dnf copr enable -y g3tchoo/prismlauncher 2>/dev/null || true
+                install_packages prismlauncher || true
+            fi
+            ;;
+        arch)
+            install_packages prismlauncher || true
+            ;;
+        suse)
+            # Available as flatpak primarily
+            print_info "Prism Launcher not in official repos, using Flatpak..."
+            ;;
+    esac
+    
+    # Fallback to Flatpak
+    if command_exists flatpak; then
+        if ! flatpak list 2>/dev/null | grep -q prismlauncher; then
+            flatpak install -y flathub org.prismlauncher.PrismLauncher
+        fi
+    fi
+}
+
+install_retroarch() {
+    print_section "🎮 Installing RetroArch (Emulation)"
+    
+    case "$DISTRO_FAMILY" in
+        debian)
+            install_packages retroarch libretro-* || true
+            ;;
+        fedora)
+            install_packages retroarch
+            ;;
+        arch)
+            install_packages retroarch libretro-core-info
+            ;;
+        suse)
+            install_packages retroarch
+            ;;
+    esac
+    
+    print_success "RetroArch installed"
+}
+
+install_steamtinkerlaunch() {
+    print_section "🔧 Installing SteamTinkerLaunch"
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            if command_exists yay; then
+                yay -S --noconfirm steamtinkerlaunch 2>/dev/null || true
+            elif command_exists paru; then
+                paru -S --noconfirm steamtinkerlaunch 2>/dev/null || true
+            fi
+            ;;
+        debian|fedora|suse)
+            # Download and install manually
+            print_info "Downloading SteamTinkerLaunch..."
+            local stl_url=$(curl -sL "https://api.github.com/repos/sonic2kk/steamtinkerlaunch/releases/latest" | grep "browser_download_url.*tar.gz" | cut -d '"' -f 4)
+            if [ -n "$stl_url" ]; then
+                mkdir -p /opt/steamtinkerlaunch
+                wget -O /tmp/steamtinkerlaunch.tar.gz "$stl_url" 2>/dev/null || true
+                tar -xzf /tmp/steamtinkerlaunch.tar.gz -C /opt/steamtinkerlaunch/ 2>/dev/null || true
+                ln -sf /opt/steamtinkerlaunch/steamtinkerlaunch /usr/local/bin/steamtinkerlaunch 2>/dev/null || true
+                print_success "SteamTinkerLaunch installed to /opt/steamtinkerlaunch/"
+            fi
+            ;;
+    esac
+}
+
+install_greenwithenvy() {
+    print_section "🟢 Installing GreenWithEnvy (NVIDIA GPU Control)"
+    
+    # Only install if NVIDIA GPU detected
+    if [ "$GPU_VENDOR" != "nvidia" ]; then
+        print_info "NVIDIA GPU not detected, skipping GreenWithEnvy"
+        return
+    fi
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            if command_exists yay; then
+                yay -S --noconfirm gwe 2>/dev/null || true
+            elif command_exists paru; then
+                paru -S --noconfirm gwe 2>/dev/null || true
+            fi
+            ;;
+        debian|fedora|suse)
+            # Install via Flatpak as primary method
+            if command_exists flatpak; then
+                if ! flatpak list 2>/dev/null | grep -q greenwithenvy; then
+                    flatpak install -y flathub com.leinardi.gwe
+                fi
+            fi
+            ;;
+    esac
+}
+
+install_sober() {
+    print_section "🧊 Installing SOBER (Roblox on Linux)"
+    
+    if command_exists flatpak; then
+        if ! flatpak list 2>/dev/null | grep -q sober; then
+            print_info "Installing SOBER for Roblox..."
+            flatpak install -y flathub org.vinegarhq.Sober
+            print_success "SOBER installed - You can now play Roblox on Linux!"
+        else
+            print_info "SOBER already installed"
+        fi
+    else
+        print_warning "Flatpak required for SOBER. Install Flatpak first."
+    fi
+}
+
+install_waydroid() {
+    print_section "🤖 Installing Waydroid (Android Container)"
+    
+    case "$DISTRO_FAMILY" in
+        debian|ubuntu)
+            if ! grep -q "waydroid" /etc/apt/sources.list.d/*.list 2>/dev/null; then
+                print_info "Adding Waydroid repository..."
+                curl https://repo.waydro.id/waydroid.gpg | tee /usr/share/keyrings/waydroid.gpg
+                echo "deb [signed-by=/usr/share/keyrings/waydroid.gpg] https://repo.waydro.id/ bookworm main" | tee /etc/apt/sources.list.d/waydroid.list
+                apt update
+            fi
+            install_packages waydroid
+            ;;
+        fedora)
+            install_packages waydroid
+            ;;
+        arch)
+            install_packages waydroid
+            ;;
+        suse)
+            print_warning "Waydroid may not be available in official openSUSE repos"
+            ;;
+    esac
+    
+    print_info "Waydroid installed. Run 'waydroid init' to set up Android container."
 }
 
 install_itch_io() {
@@ -1755,8 +2049,22 @@ install_vkd3d_proton() {
     fi
 }
 
+install_mod_managers() {
+    print_section "🧩 Installing Mod Managers"
+    
+    # r2modman - Thunderstore mod manager
+    if command_exists flatpak; then
+        if ! flatpak list 2>/dev/null | grep -q r2modman; then
+            flatpak install -y flathub com.github.elelectronstudio.r2modman
+        fi
+    fi
+}
+
 install_additional_tools() {
     print_section "🛠️ Installing Additional Gaming Tools"
+    
+    # Install PipeWire (modern audio server)
+    install_pipewire
     
     # Install Discord
     install_discord
@@ -1764,8 +2072,41 @@ install_additional_tools() {
     # Install itch.io
     install_itch_io
     
+    # Install Bottles
+    install_bottles
+    
+    # Install Prism Launcher (Minecraft)
+    install_prism_launcher
+    
+    # Install RetroArch
+    install_retroarch
+    
     # Install VKD3D-Proton
     install_vkd3d_proton
+    
+    # Install SteamTinkerLaunch
+    install_steamtinkerlaunch
+    
+    # Install GreenWithEnvy for NVIDIA
+    install_greenwithenvy
+    
+    # Install SOBER (Roblox)
+    read -p "Install SOBER for Roblox? [y/N]: " install_sober_choice
+    if [[ "$install_sober_choice" =~ ^[Yy]$ ]]; then
+        install_sober
+    fi
+    
+    # Install Waydroid (Android)
+    read -p "Install Waydroid (Android container)? [y/N]: " install_waydroid_choice
+    if [[ "$install_waydroid_choice" =~ ^[Yy]$ ]]; then
+        install_waydroid
+    fi
+    
+    # Install mod managers
+    read -p "Install mod managers (r2modman)? [y/N]: " install_mods_choice
+    if [[ "$install_mods_choice" =~ ^[Yy]$ ]]; then
+        install_mod_managers
+    fi
     
     case "$DISTRO_FAMILY" in
         debian)
@@ -1797,20 +2138,29 @@ install_additional_tools() {
         flatpak remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
         
         # Install common gaming flatpaks (check first)
-        if ! flatpak list | grep -q discord 2>/dev/null; then
+        if ! flatpak list 2>/dev/null | grep -q discord; then
             flatpak install -y flathub com.discordapp.Discord 2>/dev/null || true
         fi
         
-        if ! flatpak list | grep -q spotify 2>/dev/null; then
+        if ! flatpak list 2>/dev/null | grep -q spotify; then
             flatpak install -y flathub com.spotify.Client 2>/dev/null || true
         fi
         
-        if ! flatpak list | grep -q lutris 2>/dev/null; then
+        if ! flatpak list 2>/dev/null | grep -q lutris; then
             flatpak install -y flathub net.lutris.Lutris 2>/dev/null || true
         fi
         
-        if ! flatpak list | grep -q heroic 2>/dev/null; then
+        if ! flatpak list 2>/dev/null | grep -q heroic; then
             flatpak install -y flathub com.heroicgameslauncher.hgl 2>/dev/null || true
+        fi
+        
+        # Install additional flatpaks if not present
+        if ! flatpak list 2>/dev/null | grep -q bottles; then
+            flatpak install -y flathub com.usebottles.bottles 2>/dev/null || true
+        fi
+        
+        if ! flatpak list 2>/dev/null | grep -q prismlauncher; then
+            flatpak install -y flathub org.prismlauncher.PrismLauncher 2>/dev/null || true
         fi
     fi
     

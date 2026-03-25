@@ -7,18 +7,26 @@ Transform any Linux distribution into a gaming powerhouse with this comprehensiv
 ### 🎯 What This Toolkit Does
 
 1. **Installs Gaming Packages (Checks Before Installing)**
-   - Steam with Proton support
+   - Steam with Proton support + **SteamTinkerLaunch**
    - Lutris for unified game management
-   - Wine and Winetricks for Windows compatibility
+   - Wine + **Wine Gecko & Mono** + Winetricks for Windows compatibility
+   - **Bottles** - Modern Wine prefix manager
    - Heroic Games Launcher (Epic/GOG)
    - **itch.io** - Indie game platform
    - **Discord** - Gaming communication (native or Flatpak)
+   - **Prism Launcher** - Minecraft launcher
+   - **RetroArch** - Multi-system emulator
+   - **SOBER** - Roblox on Linux (via Flatpak)
+   - **Waydroid** - Android container for mobile games
    - GameMode performance optimizer
    - MangoHud performance overlay
    - Gamescope micro-compositor
    - vkBasalt for Vulkan post-processing
    - **VKD3D-Proton** - DirectX 12 to Vulkan translation
+   - **GreenWithEnvy** - NVIDIA GPU control tool
+   - **Mod managers** (r2modman)
    - ProtonUp-Qt for managing Proton-GE
+   - **Complete 32-bit library set** for maximum game compatibility
    - **Smart package checking** - skips already installed packages
 
 2. **Installs Gaming-Optimized Kernels**
@@ -121,8 +129,22 @@ The script presents a menu:
 | vkBasalt | Vulkan post-processing (CAS, FXAA, etc.) |
 | **DXVK** | DirectX 9/10/11 to Vulkan translation |
 | **VKD3D-Proton** | DirectX 12 to Vulkan translation |
-| CoreCtrl | GPU control and monitoring |
+| **GreenWithEnvy** | NVIDIA GPU overclocking/control |
+| CoreCtrl | AMD/Intel GPU control and monitoring |
 | ProtonUp-Qt | Manage Proton-GE versions |
+| **PipeWire** | Modern audio server (replaces PulseAudio) |
+
+### Emulation & Extra Tools
+
+| Package | Purpose |
+|---------|---------|
+| **RetroArch** | Multi-system game emulator |
+| **Prism Launcher** | Minecraft launcher with mod support |
+| **Bottles** | Modern Wine prefix manager |
+| **SteamTinkerLaunch** | Steam game configuration tool |
+| **SOBER** | Roblox on Linux |
+| **Waydroid** | Android container for mobile games |
+| **r2modman** | Mod manager for games |
 
 ## Smart Package Management
 
