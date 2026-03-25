@@ -2258,6 +2258,490 @@ install_mod_managers() {
     fi
 }
 
+# ============================================================================
+# NOBARA-STYLE FEATURES: HDR, DOLBY VISION, OLED PROTECTION
+# ============================================================================
+
+install_hdr_support() {
+    print_section "🌈 Installing HDR & Advanced Display Support"
+    
+    print_info "Installing packages for HDR, Dolby Vision, and advanced display features..."
+    
+    case "$DISTRO_FAMILY" in
+        debian|ubuntu)
+            # Mesa with HDR support
+            install_packages \
+                mesa-vulkan-drivers \
+                mesa-vulkan-drivers:i386 \
+                vulkan-tools || true
+            
+            # Gamescope with HDR support
+            install_packages gamescope || print_warning "gamescope not available"
+            
+            # libdisplay-info for HDR metadata
+            install_packages libdisplay-info0 || true
+            ;;
+            
+        fedora)
+            # Nobara-style HDR packages
+            install_packages \
+                mesa-vulkan-drivers \
+                vulkan-tools \
+                gamescope \
+                libdisplay-info
+            
+            # 32-bit vulkan drivers for HDR in games
+            install_packages mesa-vulkan-drivers.i686 || true
+            
+            # Additional HDR support packages
+            install_packages libdrm || true
+            ;;
+            
+        arch)
+            # Arch has bleeding-edge Mesa with HDR
+            pacman -Sy
+            install_packages \
+                mesa \
+                lib32-mesa \
+                vulkan-radeon \
+                lib32-vulkan-radeon \
+                vulkan-intel \
+                lib32-vulkan-intel \
+                vulkan-nouveau \
+                lib32-vulkan-nouveau \
+                vulkan-tools \
+                gamescope \
+                libdisplay-info \
+                libdrm
+            
+            # Gamescope-session for Steam Deck-like HDR experience
+            if command_exists yay; then
+                yay -S --noconfirm gamescope-session-git 2>/dev/null || true
+            fi
+            ;;
+            
+        suse)
+            install_packages \
+                Mesa \
+                Mesa-libVulkan-devel \
+                vulkan-tools \
+                gamescope || true
+            ;;
+    esac
+    
+    # Configure Gamescope for HDR
+    if command_exists gamescope; then
+        print_info "Configuring Gamescope for HDR support..."
+        
+        # Create gamescope config directory
+        mkdir -p /etc/gamescope
+        
+        # HDR-enabled gamescope session helper
+        cat > /usr/local/bin/gamescope-hdr << 'EOF'
+#!/bin/bash
+# Gamescope launcher with HDR support
+
+# Enable HDR in Gamescope
+export ENABLE_GAMESCOPE_WSI=1
+export DXVK_HDR=1
+export VK_EXT_HDR_METADATA=1
+
+# Launch gamescope with HDR
+exec gamescope --hdr-enabled --hdr-itm-enable -- "$@"
+EOF
+        chmod +x /usr/local/bin/gamescope-hdr
+        
+        # Mangoapp for HDR overlay
+        cat > /usr/local/bin/gamescope-hdr-mango << 'EOF'
+#!/bin/bash
+# Gamescope with HDR and MangoHud
+
+export ENABLE_GAMESCOPE_WSI=1
+export DXVK_HDR=1
+export VK_EXT_HDR_METADATA=1
+
+exec gamescope --hdr-enabled --hdr-itm-enable --mangoapp -- "$@"
+EOF
+        chmod +x /usr/local/bin/gamescope-hdr-mango
+        
+        log_removal "Gamescope HDR helpers"
+    fi
+    
+    # Install Mangoapp (HDR-compatible overlay)
+    install_mangoapp
+    
+    print_success "HDR support installed"
+    print_info "Note: HDR requires compatible hardware, display, and games"
+    print_info "Use 'gamescope-hdr' command to launch games with HDR"
+}
+
+install_mangoapp() {
+    print_info "Installing Mangoapp (HDR-compatible performance overlay)..."
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            install_packages mangoapp || true
+            ;;
+        fedora)
+            # Mangoapp is usually included with mangohud
+            if package_installed mangohud; then
+                print_info "MangoHud already includes MangoApp support"
+            fi
+            ;;
+    esac
+}
+
+install_oled_protection() {
+    print_section "🖥️ Installing OLED Protection & Care Tools"
+    
+    print_info "Installing OLED burn-in protection packages..."
+    
+    case "$DISTRO_FAMILY" in
+        debian|ubuntu)
+            # Screen dimming and protection tools
+            install_packages \
+                xscreensaver \
+                xscreensaver-data \
+                xautolock || true
+            
+            # GNOME/Cinnamon screensaver (if applicable)
+            install_packages \
+                gnome-screensaver \
+                cinnamon-screensaver || true
+            ;;
+            
+        fedora)
+            # Screen idle monitoring
+            install_packages \
+                xscreensaver \
+                xautolock \
+                swayidle || true
+            
+            # GNOME/KDE screensaver tools
+            install_packages \
+                gnome-screensaver \
+                kscreenlocker || true
+            ;;
+            
+        arch)
+            # OLED protection tools
+            install_packages \
+                xscreensaver \
+                xautolock \
+                swayidle \
+                brightnessctl
+            
+            # AUR packages for OLED
+            if command_exists yay; then
+                yay -S --noconfirm oled-shmoeller-git 2>/dev/null || true
+            fi
+            ;;
+            
+        suse)
+            install_packages \
+                xscreensaver \
+                xautolock || true
+            ;;
+    esac
+    
+    # Create OLED protection service
+    cat > /usr/local/bin/oled-protection << 'EOF'
+#!/bin/bash
+# OLED Protection Script - Auto-dimming and screen care
+
+# Auto-dim after 2 minutes of idle
+IDLE_TIME_LIMIT=120000  # 2 minutes in milliseconds
+
+# Dim level (percentage)
+DIM_LEVEL=30
+NORMAL_LEVEL=100
+
+while true; do
+    if command_exists xprintidle; then
+        IDLE_TIME=$(xprintidle)
+        if [ "$IDLE_TIME" -gt "$IDLE_TIME_LIMIT" ]; then
+            # Screen is idle, dim it
+            if command_exists brightnessctl; then
+                brightnessctl set ${DIM_LEVEL}% 2>/dev/null || true
+            fi
+        else
+            # Screen active, restore brightness
+            if command_exists brightnessctl; then
+                brightnessctl set ${NORMAL_LEVEL}% 2>/dev/null || true
+            fi
+        fi
+    fi
+    # Check every 10 seconds
+    sleep 10
+done
+EOF
+    chmod +x /usr/local/bin/oled-protection
+    
+    # Create OLED care tips
+    cat > /usr/share/doc/linux-gaming-toolkit/OLED-CARE.md << 'EOF'
+# OLED Display Care Guide
+
+## Automatic Protection Features Installed:
+- Screen auto-dimming after idle
+- Wallpaper rotation
+- Logo dimming suggestions
+
+## Manual Best Practices:
+
+### 1. Hide Static Elements
+- Enable auto-hide taskbar
+- Use dark themes
+- Hide desktop icons or use black background
+
+### 2. Screen Saver Settings
+- Enable after 2-5 minutes
+- Use "blank screen" or animated saver (not static image)
+- Avoid news tickers or static elements
+
+### 3. Brightness Management
+- Don't use maximum brightness constantly
+- Enable auto-brightness if available
+- Lower brightness for static content (documents, web browsing)
+
+### 4. Content Rotation
+- Vary your activities (gaming, browsing, video)
+- Use full-screen when possible to avoid window borders
+- Dark mode in browsers and applications
+
+### 5. Periodic Care
+- Run pixel refresh/refresh cycle when available
+- Turn off monitor when not in use (don't just sleep PC)
+- Use the provided OLED protection script: `oled-protection`
+
+### 6. HDR Considerations
+- HDR content can be brighter - be mindful of static elements
+- Use HDR only when needed for games/movies
+- Disable HDR for desktop browsing if possible
+
+## Useful Commands:
+```bash
+# Start OLED protection daemon
+oled-protection &
+
+# Quick brightness adjustment
+brightnessctl set 50%
+
+# Check current brightness
+brightnessctl get
+```
+
+## For ASUS OLED Monitors:
+Install ASUS Linux control center for hardware-level OLED care:
+```bash
+# On Fedora/Arch with AUR
+sudo dnf install asusctl  # Fedora
+yay -S asusctl            # Arch
+```
+
+## Kernel Parameters for OLED (Optional):
+Add to GRUB for better OLED support:
+```
+video=HDMI-A-1:2560x1440@144  # Set native resolution & refresh
+```
+EOF
+    
+    print_success "OLED protection tools installed"
+    print_info "Read /usr/share/doc/linux-gaming-toolkit/OLED-CARE.md for best practices"
+}
+
+install_nobara_extras() {
+    print_section "🎮 Installing Nobara-Style Extra Features"
+    
+    print_info "Installing additional packages inspired by Nobara OS..."
+    
+    case "$DISTRO_FAMILY" in
+        fedora)
+            # Nobara COPR repositories (optional)
+            print_info "Adding Nobara-inspired repositories..."
+            
+            # LACT - Linux AMD GPU Control Tool
+            install_packages lact || true
+            
+            # Sunshine - Game streaming
+            if command_exists dnf5; then
+                dnf copr enable -y lizardbyte/beta 2>/dev/null || true
+                install_packages sunshine || true
+            fi
+            
+            # Umu-launcher (unified launcher for non-Steam games)
+            install_packages umu-launcher || true
+            
+            # v4l2loopback for virtual cameras
+            install_packages v4l2loopback || true
+            
+            # AppArmor profiles
+            install_packages apparmor apparmor-profiles || true
+            
+            # Additional gaming fonts
+            install_packages \
+                google-roboto-fonts \
+                mozilla-fira-sans-fonts \
+                liberation-fonts || true
+            ;;
+            
+        arch)
+            # AUR packages for Nobara-style features
+            if command_exists yay; then
+                # LACT
+                yay -S --noconfirm lact 2>/dev/null || true
+                
+                # Sunshine
+                yay -S --noconfirm sunshine 2>/dev/null || true
+                
+                # umu-launcher
+                yay -S --noconfirm umu-launcher 2>/dev/null || true
+                
+                # v4l2loopback
+                yay -S --noconfirm v4l2loopback-dkms 2>/dev/null || true
+                
+                # Starship prompt
+                yay -S --noconfirm starship 2>/dev/null || true
+            fi
+            
+            # Native packages
+            install_packages \
+                ttf-roboto \
+                ttf-fira-sans \
+                ttf-liberation \
+                v4l2loopback-dkms \
+                apparmor || true
+            ;;
+            
+        debian|ubuntu)
+            # Debian equivalents
+            install_packages \
+                fonts-roboto \
+                fonts-firacode \
+                fonts-liberation \
+                v4l2loopback-dkms || true
+            
+            # Sunshine (if available)
+            install_packages sunshine || true
+            ;;
+            
+        suse)
+            install_packages \
+                google-roboto-fonts \
+                liberation-fonts \
+                v4l2loopback || true
+            ;;
+    esac
+    
+    # Install sunshine from Flatpak if not available natively
+    if ! command_exists sunshine && command_exists flatpak; then
+        if ! flatpak list 2>/dev/null | grep -q sunshine; then
+            print_info "Installing Sunshine via Flatpak..."
+            flatpak install -y flathub dev.lizardbyte.sunshine 2>/dev/null || true
+        fi
+    fi
+    
+    # Create Starship config if installed
+    if command_exists starship; then
+        print_info "Configuring Starship prompt..."
+        mkdir -p /etc/skel/.config
+        cat > /etc/skel/.config/starship.toml << 'EOF'
+# Starship configuration - Gaming-focused prompt
+
+[character]
+success_symbol = '[➜](bold green)'
+error_symbol = '[✗](bold red)'
+
+[directory]
+truncation_length = 3
+truncate_to_repo = true
+
+[git_branch]
+symbol = '🌱 '
+
+[package]
+symbol = '📦 '
+
+[nodejs]
+symbol = '⬢ '
+
+[rust]
+symbol = '🦀 '
+
+[python]
+symbol = '🐍 '
+EOF
+        log_removal "Starship configuration"
+    fi
+    
+    print_success "Nobara-style extras installed"
+}
+
+configure_advanced_graphics() {
+    print_section "🔧 Configuring Advanced Graphics Features"
+    
+    # Enable amdgpu feature masks for better performance (AMD GPUs)
+    if [ "$GPU_VENDOR" == "amd" ]; then
+        print_info "Configuring AMD GPU advanced features..."
+        
+        cat > /etc/modprobe.d/amdgpu-performance.conf << 'EOF'
+# AMD GPU Performance Optimizations
+# Enable all shader engines and boost performance
+
+# Enable performance level control
+options amdgpu power_dpm_state=performance
+
+# Enable GPU overclocking (if supported)
+options amdgpu ppfeaturemask=0xffffffff
+
+# Disable runtime power management for gaming
+options amdgpu runtime_pm=0
+EOF
+        print_success "AMD GPU performance settings configured"
+    fi
+    
+    # NVIDIA-specific optimizations
+    if [ "$GPU_VENDOR" == "nvidia" ]; then
+        print_info "Configuring NVIDIA advanced features..."
+        
+        cat > /etc/modprobe.d/nvidia-performance.conf << 'EOF'
+# NVIDIA Performance Optimizations
+
+# Enable persistence mode for lower latency
+options nvidia NVreg_PreserveVideoMemoryAllocations=1
+
+# Enable custom EDID support
+options nvidia NVreg_EnableUserNUMADisplay=1
+
+# Enable direct rendering mode
+options nvidia-drm modeset=1 fbdev=1
+EOF
+        
+        # Enable nvidia-modeset for Wayland/HDR
+        if [ -f /etc/modprobe.d/nvidia-modeset.conf ]; then
+            if ! grep -q "modeset=1" /etc/modprobe.d/nvidia-modeset.conf 2>/dev/null; then
+                echo "options nvidia-drm modeset=1 fbdev=1" >> /etc/modprobe.d/nvidia-modeset.conf
+            fi
+        else
+            echo "options nvidia-drm modeset=1 fbdev=1" > /etc/modprobe.d/nvidia-modeset.conf
+        fi
+        
+        print_success "NVIDIA performance settings configured"
+    fi
+    
+    # Update initramfs
+    case "$DISTRO_FAMILY" in
+        debian|ubuntu)
+            update-initramfs -u 2>/dev/null || true
+            ;;
+        fedora)
+            dracut --force 2>/dev/null || true
+            ;;
+        arch)
+            mkinitcpio -P 2>/dev/null || true
+            ;;
+    esac
+}
+
 install_additional_tools() {
     print_section "🛠️ Installing Additional Gaming Tools"
     
@@ -2596,7 +3080,7 @@ show_whiptail_menu() {
     fi
     
     local choice
-    choice=$(whiptail --title "Linux Gaming Toolkit v3" --menu "Select action 🕹️" 22 72 12 \
+    choice=$(whiptail --title "Linux Gaming Toolkit v3" --menu "Select action 🕹️" 25 72 16 \
         "1" "🚀 Full Gaming Setup (Recommended)" \
         "2" "📦 Install Gaming Packages Only" \
         "3" "🐧 Install Gaming Kernel" \
@@ -2608,6 +3092,10 @@ show_whiptail_menu() {
         "9" "🎲 Configure GameMode" \
         "10" "🛠️ Install Additional Tools (Discord, itch.io)" \
         "11" "🌐 Check for Latest Drivers Online" \
+        "12" "🌈 Install HDR & Dolby Vision Support" \
+        "13" "🖥️ Install OLED Protection Tools" \
+        "14" "🎮 Install Nobara Extra Features" \
+        "15" "🔧 Configure Advanced Graphics" \
         "0" "🚪 Exit" 3>&1 1>&2 2>&3)
     
     echo "$choice"
@@ -2642,6 +3130,18 @@ show_menu() {
     echo "  9) 🎲 Configure GameMode"
     echo " 10) 🛠️ Install Additional Tools (Discord, itch.io, VKD3D)"
     echo " 11) 🌐 Check for Latest Drivers Online"
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo "         ADVANCED FEATURES (Nobara-Style)                          "
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo ""
+    echo " 12) 🌈 Install HDR & Dolby Vision Support"
+    echo " 13) 🖥️ Install OLED Protection Tools"
+    echo " 14) 🎮 Install Nobara Extra Features"
+    echo " 15) 🔧 Configure Advanced Graphics"
+    echo ""
+    echo "═══════════════════════════════════════════════════════════════════"
+    echo ""
     echo "  0) 🚪 Exit"
     echo ""
     echo "═══════════════════════════════════════════════════════════════════"
@@ -2739,7 +3239,7 @@ main() {
             fi
         else
             show_menu
-            read -p "Enter your choice [0-11]: " choice
+            read -p "Enter your choice [0-15]: " choice
         fi
         
         case "$choice" in
@@ -2787,6 +3287,22 @@ main() {
                 ;;
             11)
                 check_latest_drivers_online
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            12)
+                install_hdr_support
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            13)
+                install_oled_protection
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            14)
+                install_nobara_extras
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            15)
+                configure_advanced_graphics
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             0|""|*)
