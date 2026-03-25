@@ -383,22 +383,29 @@ install_nvidia_drivers() {
     fi
     
     echo ""
-    echo "Choose driver option:"
-    echo "  1) Install/Update to latest proprietary driver (recommended)"
-    echo "  2) Install open-source Nouveau driver (limited performance)"
-    echo "  3) Skip driver installation"
+    echo "Choose NVIDIA driver option:"
     echo ""
-    read -p "Enter choice [1-3]: " nvidia_choice
+    echo "  1) Proprietary driver (closed-source, best performance - RECOMMENDED)"
+    echo "  2) Open kernel modules (open-source kernel, proprietary userspace)"
+    echo "     - For Turing (RTX 20) and newer GPUs"
+    echo "     - Better for Wayland, container workloads"
+    echo "  3) Nouveau (fully open-source, limited gaming performance)"
+    echo "  4) Skip driver installation"
+    echo ""
+    read -p "Enter choice [1-4]: " nvidia_choice
     
     case "$nvidia_choice" in
         1)
             install_nvidia_proprietary "$driver_branch"
             ;;
         2)
-            print_info "Keeping Nouveau driver (note: gaming performance will be limited)"
-            install_package mesa-vulkan-drivers
+            install_nvidia_open "$driver_branch"
             ;;
         3)
+            print_info "Installing Nouveau driver (note: gaming performance will be limited)"
+            install_package mesa-vulkan-drivers
+            ;;
+        4)
             print_info "Skipping NVIDIA driver installation"
             return
             ;;
@@ -532,6 +539,170 @@ EOF
     print_success "NVIDIA proprietary driver installed/updated"
     print_info "Driver version: $new_version"
     print_warning "Please REBOOT to load the NVIDIA driver"
+}
+
+install_nvidia_open() {
+    local branch="${1:-latest}"
+    
+    print_section "🐧 Installing NVIDIA Open Kernel Modules"
+    
+    print_warning "Open kernel modules are recommended for:"
+    print_warning "  - Turing (RTX 20) and newer GPUs"
+    print_warning "  - Wayland users"
+    print_warning "  - Container/Docker GPU workloads"
+    print_warning "  - Users who prefer open-source kernel code"
+    echo ""
+    
+    case "$DISTRO_FAMILY" in
+        debian|ubuntu)
+            apt update
+            
+            # Install prerequisites
+            install_packages linux-headers-$(uname -r) dkms
+            
+            # Add non-free repositories
+            if ! grep -q "non-free" /etc/apt/sources.list; then
+                print_info "Adding non-free repositories..."
+                sed -i 's/main$/main contrib non-free non-free-firmware/' /etc/apt/sources.list
+                apt update
+            fi
+            
+            # Check if open modules are available (Debian 12+/Ubuntu 22.04+)
+            . /etc/os-release
+            local can_install_open=false
+            
+            if [ "$VERSION_ID" \> "12" ] || [ "$VERSION_ID" == "12" ] 2>/dev/null || \
+               [ "$ID" == "ubuntu" ] && [ "${VERSION_ID%%.*}" -ge "22" ] 2>/dev/null; then
+                can_install_open=true
+            fi
+            
+            if [ "$can_install_open" = true ]; then
+                print_info "Installing NVIDIA driver with open kernel modules..."
+                
+                # Install the open driver package if available
+                if apt-cache show nvidia-driver-open 2>/dev/null | grep -q "Package:"; then
+                    install_packages nvidia-driver-open nvidia-settings nvidia-xconfig
+                else
+                    # Fallback: install regular driver but will use open modules if available
+                    print_warning "nvidia-driver-open not found, installing standard driver..."
+                    install_packages nvidia-driver nvidia-settings
+                    print_info "You may need to manually enable open modules:"
+                    print_info "  echo 'options nvidia NVreg_OpenRmEnableUnsupportedGpus=1' > /etc/modprobe.d/nvidia-open.conf"
+                fi
+            else
+                print_warning "Open kernel modules require newer distribution version"
+                print_info "Installing proprietary driver instead..."
+                install_packages nvidia-driver nvidia-settings
+            fi
+            
+            # Install 32-bit libraries
+            install_packages libnvidia-eglcore:i386 libnvidia-glcore:i386 || true
+            install_packages nvidia-driver-libs:i386 || true
+            ;;
+            
+        fedora)
+            # Fedora 37+ has open kernel modules
+            if ! rpm -qa | grep -q rpmfusion; then
+                print_info "Enabling RPM Fusion repositories..."
+                dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
+                dnf install -y https://download1.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-$(rpm -E %fedora).noarch.rpm
+            fi
+            
+            install_packages kernel-devel kernel-headers akmods
+            
+            # Check Fedora version for open module availability
+            local fedora_version=$(rpm -E %fedora)
+            if [ "$fedora_version" -ge "37" ]; then
+                print_info "Installing akmod-nvidia-open (open kernel modules)..."
+                install_packages akmod-nvidia-open
+                
+                # Set module parameter to enable open modules
+                mkdir -p /etc/modprobe.d
+                echo "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1" > /etc/modprobe.d/nvidia-open.conf
+            else
+                print_warning "Fedora $fedora_version: Open modules require Fedora 37+"
+                print_info "Installing proprietary driver instead..."
+                install_packages akmod-nvidia
+            fi
+            
+            install_packages xorg-x11-drv-nvidia-libs.i686 || true
+            install_packages xorg-x11-drv-nvidia-cuda || print_warning "CUDA installation skipped"
+            
+            print_info "Building kernel module..."
+            akmods --force 2>/dev/null || true
+            ;;
+            
+        arch)
+            pacman -Sy
+            
+            # Arch has nvidia-open-dkms package
+            local kernel=$(uname -r)
+            if echo "$kernel" | grep -q "zen\|lts\|hardened"; then
+                print_info "Non-standard kernel detected, using nvidia-open-dkms"
+                install_packages nvidia-open-dkms nvidia-utils lib32-nvidia-utils
+            else
+                print_info "Installing nvidia-open (open kernel modules)..."
+                install_packages nvidia-open nvidia-utils lib32-nvidia-utils
+            fi
+            
+            install_packages nvidia-settings
+            
+            # Enable open modules
+            mkdir -p /etc/modprobe.d
+            echo "options nvidia NVreg_OpenRmEnableUnsupportedGpus=1" > /etc/modprobe.d/nvidia-open.conf
+            ;;
+            
+        suse)
+            # openSUSE Tumbleweed has open modules
+            if ! zypper repos | grep -q nvidia; then
+                zypper addrepo -f https://download.nvidia.com/opensuse/tumbleweed NVIDIA
+                zypper refresh
+            fi
+            
+            # Try to install open driver variant
+            if zypper search nvidia-open-driver 2>/dev/null | grep -q "nvidia-open-driver"; then
+                print_info "Installing nvidia-open-driver..."
+                install_packages nvidia-open-driver nvidia-settings nvidia-utils
+            else
+                print_warning "Open driver not found, installing proprietary driver..."
+                install_packages nvidia-driver nvidia-settings nvidia-utils
+            fi
+            
+            install_packages nvidia-gl-G06-32bit || true
+            ;;
+    esac
+    
+    # Blacklist nouveau
+    if [ ! -f /etc/modprobe.d/blacklist-nouveau.conf ]; then
+        print_info "Blacklisting nouveau driver..."
+        cat > /etc/modprobe.d/blacklist-nouveau.conf << 'EOF'
+blacklist nouveau
+options nouveau modeset=0
+EOF
+    fi
+    
+    # Update initramfs
+    case "$DISTRO_FAMILY" in
+        debian)
+            update-initramfs -u
+            ;;
+        fedora)
+            dracut --force
+            ;;
+        arch)
+            mkinitcpio -P
+            ;;
+        suse)
+            mkinitrd
+            ;;
+    esac
+    
+    print_success "NVIDIA driver with open kernel modules installed"
+    print_info "Driver type: Open Kernel Modules + Proprietary Userspace"
+    print_warning "Please REBOOT to load the NVIDIA driver"
+    print_info ""
+    print_info "To verify open modules after reboot:"
+    print_info "  nvidia-smi -q | grep 'Kernel Module Type'"
 }
 
 install_mesa_fallback() {

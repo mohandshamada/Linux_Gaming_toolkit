@@ -35,8 +35,12 @@ Transform any Linux distribution into a gaming powerhouse with this comprehensiv
    - Zen Kernel (Arch-based)
    - CachyOS Kernel (performance-focused)
 
-3. **GPU Driver Installation (Proprietary & Latest)**
-   - **NVIDIA**: Proprietary drivers with version detection and latest driver check
+3. **GPU Driver Installation (Proprietary, Open & Latest)**
+   - **NVIDIA**: 
+     - Proprietary drivers (best performance/compatibility)
+     - **Open kernel modules** (for Turing RTX 20+ and newer GPUs, better for Wayland)
+     - Nouveau (fully open-source)
+     - Version detection and latest driver check
    - **AMD**: Mesa RADV (recommended) or AMDGPU-PRO (workstation)
    - **Intel**: Mesa with Arc GPU support
    - Automatic GPU model detection
