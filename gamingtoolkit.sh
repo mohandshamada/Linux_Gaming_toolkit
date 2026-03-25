@@ -44,6 +44,50 @@ USE_WHIPTAIL=false
 # UTILITY FUNCTIONS
 # ============================================================================
 
+# Get the original user who ran sudo (for running commands as user instead of root)
+get_original_user() {
+    if [ -n "${SUDO_USER:-}" ]; then
+        echo "$SUDO_USER"
+    elif [ -n "${DOAS_USER:-}" ]; then
+        echo "$DOAS_USER"
+    else
+        echo ""
+    fi
+}
+
+# Run command as original user (not root)
+run_as_user() {
+    local user=$(get_original_user)
+    if [ -n "$user" ]; then
+        sudo -u "$user" "$@"
+    else
+        "$@"
+    fi
+}
+
+# Run winetricks as the original user with proper environment
+run_winetricks_as_user() {
+    local user=$(get_original_user)
+    if [ -z "$user" ]; then
+        print_warning "Cannot determine original user, skipping winetricks configuration"
+        return 1
+    fi
+    
+    print_info "Running winetricks as user: $user"
+    
+    # Get user's home directory
+    local user_home=$(getent passwd "$user" | cut -d: -f6)
+    
+    # Run winetricks with user's environment
+    sudo -u "$user" \
+        HOME="$user_home" \
+        WINEARCH=win32 \
+        WINEPREFIX="${user_home}/.wine" \
+        winetricks --unattended "$@" 2>/dev/null || return 1
+    
+    return 0
+}
+
 log_msg() {
     echo -e "$1" | tee -a "$LOG_FILE"
 }
@@ -724,30 +768,6 @@ install_mesa_fallback() {
     esac
 }
 
-install_nvidia_drivers() {
-    print_info "Installing NVIDIA drivers..."
-    
-    case "$DISTRO_FAMILY" in
-        debian)
-            apt install -y linux-headers-$(uname -r) dkms
-            apt install -y nvidia-driver nvidia-settings nvidia-xconfig
-            apt install -y libnvidia-encode1:i386 nvidia-driver-libs:i386 || true
-            ;;
-        fedora)
-            dnf install -y akmod-nvidia
-            dnf install -y xorg-x11-drv-nvidia-cuda
-            dnf install -y xorg-x11-drv-nvidia-libs.i686 || true
-            ;;
-        arch)
-            pacman -S --noconfirm nvidia nvidia-utils lib32-nvidia-utils nvidia-settings
-            ;;
-        suse)
-            zypper install -y nvidia-driver nvidia-settings nvidia-utils
-            ;;
-    esac
-    
-    print_success "NVIDIA drivers installed"
-}
 
 install_amd_drivers() {
     print_section "🎨 AMD Driver Installation"
@@ -1084,8 +1104,8 @@ install_debian_gaming_packages() {
     # Configure winetricks with essential components
     if command_exists winetricks; then
         print_info "Configuring Wine with Winetricks (corefonts, dxvk)..."
-        # Create a temporary user to run winetricks without X
-        WINEARCH=win32 winetricks --unattended corefonts dxvk vcrun2019 2>/dev/null || true
+        run_winetricks_as_user corefonts dxvk vcrun2019 || \
+            print_warning "Winetricks configuration failed (run manually as user)"
     fi
     
     # Install ProtonUp-Qt
@@ -1143,7 +1163,8 @@ install_fedora_gaming_packages() {
     # Configure Wine with Winetricks
     if command_exists winetricks; then
         print_info "Configuring Wine with Winetricks..."
-        winetricks --unattended corefonts dxvk vcrun2019 2>/dev/null || true
+        run_winetricks_as_user corefonts dxvk vcrun2019 || \
+            print_warning "Winetricks configuration failed (run manually as user)"
     fi
     
     # Optional packages
@@ -1204,7 +1225,8 @@ install_arch_gaming_packages() {
     # Configure Wine with essential Winetricks components
     if command_exists winetricks; then
         print_info "Configuring Wine with Winetricks..."
-        winetricks --unattended corefonts dxvk vcrun2019 2>/dev/null || true
+        run_winetricks_as_user corefonts dxvk vcrun2019 || \
+            print_warning "Winetricks configuration failed (run manually as user)"
     fi
     
     # Install from AUR if helper available
@@ -1584,9 +1606,14 @@ disable_cpu_mitigations() {
             *)
                 # For GRUB-based systems
                 if grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub; then
-                    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 mitigations=off"/' /etc/default/grub
-                    sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=" *\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1"/' /etc/default/grub
-                    update-grub 2>/dev/null || grub-mkconfig -o /boot/grub/grub.cfg
+                    # Check if mitigations=off is already present
+                    if ! grep -q "mitigations=off" /etc/default/grub; then
+                        sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 mitigations=off"/' /etc/default/grub
+                        sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=" *\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1"/' /etc/default/grub
+                        update-grub 2>/dev/null || grub-mkconfig -o /boot/grub/grub.cfg
+                    else
+                        print_info "mitigations=off already present in GRUB config"
+                    fi
                 fi
                 ;;
         esac
