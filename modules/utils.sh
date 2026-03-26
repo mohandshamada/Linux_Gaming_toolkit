@@ -25,7 +25,7 @@ print_header() {
     echo -e "${CYAN}"
     echo "╔════════════════════════════════════════════════════════════════════╗"
     echo "║                                                                    ║"
-    echo "║          🎮  LINUX GAMING TOOLKIT - VERSION 3.6                   ║"
+    echo "║          🎮  LINUX GAMING TOOLKIT - VERSION 3                   ║"
     echo "║                                                                    ║"
     echo "║     Transform any Linux distro into a Gaming Powerhouse           ║"
     echo "║                                                                    ║"

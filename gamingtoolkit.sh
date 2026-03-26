@@ -4,7 +4,7 @@
 # This script transforms any Linux distro into a gaming powerhouse
 # Compatible with: Debian/Ubuntu, Fedora, Arch Linux, openSUSE
 #
-# Version: 3.6
+# Version: 3
 # Created: 2026
 #
 
@@ -3924,7 +3924,7 @@ show_whiptail_menu() {
     fi
     
     local choice
-    choice=$(whiptail --title "Linux Gaming Toolkit v3.6" --menu "Select action 🕹️" 28 76 22 \
+    choice=$(whiptail --title "Linux Gaming Toolkit v3" --menu "Select action 🕹️" 28 76 22 \
         "1" "🚀 Full Gaming Setup (Recommended)" \
         "2" "📦 Install Gaming Packages Only" \
         "3" "🐧 Install Gaming Kernel" \
