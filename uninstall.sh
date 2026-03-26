@@ -134,6 +134,17 @@ restore_backups() {
         fi
     done
     
+    # Restore modprobe backups
+    for backup in /etc/modprobe.d/*.backup.*; do
+        if [ -f "$backup" ]; then
+            local original="${backup%.backup.*}"
+            echo "  Restoring: $backup → $original"
+            cp "$backup" "$original"
+            backup_found=true
+            log_removal "Restored $(basename "$original") from backup"
+        fi
+    done
+    
     if [ "$backup_found" = false ]; then
         echo -e "${YELLOW}  No backup files found to restore${NC}"
     fi
@@ -261,7 +272,9 @@ remove_packages() {
                 bottles \
                 flatpak \
                 waydroid \
-                pipewire pipewire-pulse wireplumber 2>/dev/null || true
+                pipewire pipewire-pulse wireplumber \
+                easyeffects pulseeffects \
+                protontricks 2>/dev/null || true
             
             # Remove NVIDIA drivers if present
             apt remove -y --purge \
@@ -286,7 +299,11 @@ remove_packages() {
                 obs-studio \
                 prismlauncher \
                 retroarch \
-                pipewire wireplumber 2>/dev/null || true
+                pipewire wireplumber \
+                easyeffects \
+                protontricks \
+                lact asusctl supergfxctl \
+                powertop tlp 2>/dev/null || true
             
             # Remove NVIDIA drivers
             dnf remove -y akmod-nvidia akmod-nvidia-open 2>/dev/null || true
@@ -312,7 +329,14 @@ remove_packages() {
                 steamtinkerlaunch \
                 gwe \
                 pipewire wireplumber \
-                waydroid 2>/dev/null || true
+                waydroid \
+                easyeffects \
+                protontricks \
+                lact asusctl supergfxctl \
+                scx-scheds \
+                powertop tlp \
+                replaysorcery gpu-screen-recorder \
+                protonup-qt protonup 2>/dev/null || true
             
             # Remove NVIDIA drivers
             pacman -Rns --noconfirm nvidia nvidia-open nvidia-dkms nvidia-open-dkms nvidia-utils 2>/dev/null || true
@@ -327,7 +351,9 @@ remove_packages() {
                 mangohud \
                 vulkan-tools \
                 gamescope \
-                obs-studio 2>/dev/null || true
+                obs-studio \
+                pipewire wireplumber \
+                powertop tlp 2>/dev/null || true
             
             # Remove NVIDIA drivers
             zypper remove -y nvidia-driver nvidia-open-driver 2>/dev/null || true
@@ -391,6 +417,21 @@ remove_optimizations() {
         rm -f /etc/modprobe.d/nvidia-open.conf
         log_removal "NVIDIA open module config"
     fi
+    
+    if [ -f /etc/modprobe.d/nvidia-performance.conf ]; then
+        rm -f /etc/modprobe.d/nvidia-performance.conf
+        log_removal "NVIDIA performance config"
+    fi
+    
+    if [ -f /etc/modprobe.d/amdgpu-performance.conf ]; then
+        rm -f /etc/modprobe.d/amdgpu-performance.conf
+        log_removal "AMDGPU performance config"
+    fi
+    
+    if [ -f /etc/modprobe.d/nvidia-modeset.conf ]; then
+        rm -f /etc/modprobe.d/nvidia-modeset.conf
+        log_removal "NVIDIA modeset config"
+    fi
 }
 
 # ============================================
@@ -424,11 +465,199 @@ remove_kernel() {
 }
 
 # ============================================
+# REMOVE V3.5 FEATURES
+# ============================================
+
+remove_v34_features() {
+    echo -e "${BLUE}Removing v3.4 HDR & Nobara features...${NC}"
+    
+    # Remove HDR/OLED related services
+    systemctl stop oled-protection.service 2>/dev/null || true
+    systemctl disable oled-protection.service 2>/dev/null || true
+    rm -f /etc/systemd/system/oled-protection.service
+    
+    # Remove HDR modprobe configs
+    rm -f /etc/modprobe.d/amdgpu-hdr.conf
+    rm -f /etc/modprobe.d/nvidia-hdr.conf
+    
+    # Remove Nobara packages
+    case "$DISTRO_FAMILY" in
+        arch)
+            pacman -Rns --noconfirm lact asusctl supergfxctl 2>/dev/null || true
+            pacman -Rns --noconfirm auto-cpufreq wootility piper 2>/dev/null || true
+            pacman -Rns --noconfirm sunshine umu-launcher v4l2loopback-dkms 2>/dev/null || true
+            ;;
+        fedora)
+            dnf remove -y lact asusctl supergfxctl 2>/dev/null || true
+            dnf remove -y auto-cpufreq wootility piper 2>/dev/null || true
+            dnf remove -y sunshine umu-launcher v4l2loopback 2>/dev/null || true
+            dnf copr remove -y lizardbyte/beta 2>/dev/null || true
+            ;;
+        debian|ubuntu)
+            apt remove -y --purge lact asusctl supergfxctl 2>/dev/null || true
+            apt remove -y --purge auto-cpufreq wootility piper 2>/dev/null || true
+            ;;
+    esac
+    
+    log_removal "v3.4 HDR & Nobara features"
+}
+
+remove_v35_features() {
+    echo -e "${BLUE}Removing v3.5 advanced features...${NC}"
+    
+    # Remove scx_lavd scheduler
+    echo "  Removing scx_lavd scheduler..."
+    systemctl stop scx.service 2>/dev/null || true
+    systemctl disable scx.service 2>/dev/null || true
+    rm -f /etc/systemd/system/scx.service
+    rm -f /etc/default/scx
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            pacman -Rns --noconfirm scx-scheds 2>/dev/null || true
+            ;;
+        fedora)
+            dnf remove -y scx-scheds 2>/dev/null || true
+            ;;
+        debian|ubuntu)
+            apt remove -y --purge scx-scheds 2>/dev/null || true
+            ;;
+    esac
+    log_removal "scx_lavd scheduler"
+    
+    # Remove Gamescope helper scripts
+    echo "  Removing Gamescope helper scripts..."
+    rm -f /usr/local/bin/gamescope-fsr
+    rm -f /usr/local/bin/gamescope-nis
+    rm -f /usr/local/bin/gamescope-hdr
+    rm -f /usr/local/bin/gamescope-mango
+    rm -f /usr/local/bin/gamescope-full
+    log_removal "Gamescope helper scripts"
+    
+    # Remove Proton-GE updater
+    rm -f /usr/local/bin/update-proton-ge
+    log_removal "Proton-GE update script"
+    
+    # Remove LatencyFleX
+    echo "  Removing LatencyFleX..."
+    rm -f /usr/share/vulkan/implicit_layer.d/latencyflex.json
+    rm -f /usr/lib/liblatencyflex.so
+    rm -f /usr/lib32/liblatencyflex.so
+    log_removal "LatencyFleX"
+    
+    # Remove handheld tools
+    echo "  Removing handheld tools..."
+    rm -f /usr/local/bin/tdp-control
+    case "$DISTRO_FAMILY" in
+        arch)
+            pacman -Rns --noconfirm steamdeck-dsp jupiter-hw-support powertop tlp 2>/dev/null || true
+            ;;
+        fedora|debian|ubuntu)
+            dnf remove -y powertop tlp 2>/dev/null || true
+            apt remove -y --purge powertop tlp 2>/dev/null || true
+            ;;
+    esac
+    log_removal "Handheld tools"
+    
+    # Remove advanced audio configs
+    echo "  Removing advanced audio configuration..."
+    rm -f /etc/pipewire/pipewire.conf.d/10-lowlatency.conf
+    rm -f /etc/pipewire/client.conf.d/10-lowlatency.conf
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            pacman -Rns --noconfirm easyeffects pipewire-pulse pipewire-jack 2>/dev/null || true
+            ;;
+        fedora)
+            dnf remove -y easyeffects 2>/dev/null || true
+            ;;
+        debian|ubuntu)
+            apt remove -y --purge easyeffects pulseeffects 2>/dev/null || true
+            ;;
+    esac
+    log_removal "Advanced audio tools"
+    
+    # Remove Ludusavi
+    rm -f /usr/local/bin/ludusavi
+    log_removal "Ludusavi save backup tool"
+    
+    # Remove gaming overlays
+    echo "  Removing gaming overlays..."
+    rm -f /usr/local/bin/obs-game-capture
+    rm -f /etc/replaysorcery.conf
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            pacman -Rns --noconfirm obs-vkcapture replaysorcery gpu-screen-recorder 2>/dev/null || true
+            ;;
+        fedora)
+            dnf remove -y obs-vkcapture 2>/dev/null || true
+            ;;
+    esac
+    log_removal "Gaming overlays"
+    
+    # Remove Protontricks
+    case "$DISTRO_FAMILY" in
+        arch)
+            pacman -Rns --noconfirm protontricks 2>/dev/null || true
+            ;;
+        fedora|debian|ubuntu)
+            pip3 uninstall -y protontricks 2>/dev/null || true
+            ;;
+    esac
+    log_removal "Protontricks"
+    
+    # Remove v3.5 documentation
+    rm -f /usr/share/doc/linux-gaming-toolkit/GAMESCOPE.md
+    rm -f /usr/share/doc/linux-gaming-toolkit/ANTICHEAT.md
+    
+    # Remove Proton-GE (ask user)
+    echo ""
+    echo -e "${YELLOW}Proton-GE is installed per-user in ~/.steam/root/compatibilitytools.d/${NC}"
+    read -p "Remove all Proton-GE versions? [y/N]: " remove_proton_ge
+    if [[ "$remove_proton_ge" =~ ^[Yy]$ ]]; then
+        # Find all user home directories
+        for user_home in /home/*; do
+            if [ -d "$user_home/.steam/root/compatibilitytools.d" ]; then
+                rm -rf "$user_home/.steam/root/compatibilitytools.d"/GE-Proton* 2>/dev/null || true
+                rm -rf "$user_home/.steam/root/compatibilitytools.d"/proton-ge* 2>/dev/null || true
+            fi
+        done
+        # Also check root
+        rm -rf /root/.steam/root/compatibilitytools.d/GE-Proton* 2>/dev/null || true
+        log_removal "Proton-GE versions"
+    fi
+    
+    # Remove cron jobs for Proton-GE updates
+    echo "  Checking for Proton-GE update cron jobs..."
+    for user_crontab in /var/spool/cron/*; do
+        if [ -f "$user_crontab" ]; then
+            if grep -q "update-proton-ge" "$user_crontab" 2>/dev/null; then
+                sed -i '/update-proton-ge/d' "$user_crontab"
+                log_removal "Proton-GE update cron job"
+            fi
+        fi
+    done
+    
+    # Remove user-specific files
+    echo ""
+    echo -e "${YELLOW}The following user-specific files need manual removal:${NC}"
+    echo "  ~/.config/easyeffects/       (EasyEffects presets)"
+    echo "  ~/.local/share/latencyflex/  (LatencyFleX Wine integration)"
+    echo "  ~/.local/share/ludusavi/     (Ludusavi config)"
+    echo "  ~/.steam/root/compatibilitytools.d/GE-Proton*"
+}
+
+# ============================================
 # REMOVE CONFIGS
 # ============================================
 
 remove_configs() {
     echo -e "${BLUE}Removing configuration files...${NC}"
+    
+    # Remove v3.4 and v3.5 features
+    remove_v34_features
+    remove_v35_features
     
     # Remove global configs
     rm -rf /usr/share/gamemode 2>/dev/null || true
