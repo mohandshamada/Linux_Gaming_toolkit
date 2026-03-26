@@ -159,40 +159,29 @@ remove_repositories() {
     
     case "$DISTRO_FAMILY" in
         debian)
-            # Remove WineHQ repository
-            if [ -f /etc/apt/sources.list.d/winehq-*.sources ]; then
-                rm -f /etc/apt/sources.list.d/winehq-*.sources
-                rm -f /etc/apt/keyrings/winehq-archive.key
-                log_removal "WineHQ repository"
-            fi
-            
-            # Remove kisak-mesa PPA
-            if [ -f /etc/apt/sources.list.d/kisak-ubuntu-kisak-mesa-*.list ]; then
-                rm -f /etc/apt/sources.list.d/kisak-ubuntu-kisak-mesa-*.list
-                rm -f /usr/share/keyrings/kisak-*.gpg
-                log_removal "kisak-mesa PPA"
-            fi
-            
-            # Remove Prism Launcher repo
-            if [ -f /etc/apt/sources.list.d/prebuilt-mpr.list ]; then
-                rm -f /etc/apt/sources.list.d/prebuilt-mpr.list
-                rm -f /usr/share/keyrings/prebuilt-mpr-archive-keyring.gpg
-                log_removal "Prism Launcher repository"
-            fi
-            
-            # Remove Waydroid repo
-            if [ -f /etc/apt/sources.list.d/waydroid.list ]; then
-                rm -f /etc/apt/sources.list.d/waydroid.list
-                rm -f /usr/share/keyrings/waydroid.gpg
-                log_removal "Waydroid repository"
-            fi
-            
-            # Remove XanMod repository
-            if [ -f /etc/apt/sources.list.d/xanmod-release.list ]; then
-                rm -f /etc/apt/sources.list.d/xanmod-release.list
-                rm -f /usr/share/keyrings/xanmod-archive-keyring.gpg
-                log_removal "XanMod repository"
-            fi
+            # Function to remove a repo by searching for its URL pattern
+            remove_debian_repo() {
+                local pattern="$1"
+                local name="$2"
+                local keyfile="$3"
+                local found_files=$(grep -l "$pattern" /etc/apt/sources.list.d/*.list /etc/apt/sources.list.d/*.sources 2>/dev/null || true)
+                
+                if [ -n "$found_files" ]; then
+                    for file in $found_files; do
+                        rm -f "$file"
+                    done
+                    if [ -n "$keyfile" ]; then
+                        rm -f "$keyfile"
+                    fi
+                    log_removal "$name"
+                fi
+            }
+
+            remove_debian_repo "dl.winehq.org" "WineHQ repository" "/etc/apt/keyrings/winehq-archive.key"
+            remove_debian_repo "ppa:kisak/kisak-mesa" "kisak-mesa PPA" "/usr/share/keyrings/kisak-*.gpg"
+            remove_debian_repo "proget.makedeb.org" "Prism Launcher repository" "/usr/share/keyrings/prebuilt-mpr-archive-keyring.gpg"
+            remove_debian_repo "repo.waydro.id" "Waydroid repository" "/usr/share/keyrings/waydroid.gpg"
+            remove_debian_repo "deb.xanmod.org" "XanMod repository" "/usr/share/keyrings/xanmod-archive-keyring.gpg"
             
             apt update
             ;;

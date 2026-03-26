@@ -26,93 +26,24 @@ BOLD='\033[1m'
 # Script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Logging with /tmp fallback (like Dennis Hilk's approach)
-LOG_FILE="/var/log/gamingtoolkit.log"
-if ! touch "$LOG_FILE" &>/dev/null; then
-    LOG_FILE="/tmp/gamingtoolkit.log"
-    touch "$LOG_FILE"
+# Source modules
+if [ -f "${SCRIPT_DIR}/modules/utils.sh" ]; then
+    source "${SCRIPT_DIR}/modules/utils.sh"
+else
+    echo "Error: modules/utils.sh not found!"
+    exit 1
 fi
 
-# Global variables
-DISTRO=""
-DISTRO_FAMILY=""
-ARCH=""
-GPU_VENDOR=""
-USE_WHIPTAIL=false
+if [ -f "${SCRIPT_DIR}/modules/detection.sh" ]; then
+    source "${SCRIPT_DIR}/modules/detection.sh"
+else
+    print_error "modules/detection.sh not found!"
+    exit 1
+fi
 
 # ============================================================================
-# UTILITY FUNCTIONS
+# PACKAGE MANAGEMENT
 # ============================================================================
-
-# Get the original user who ran sudo (for running commands as user instead of root)
-get_original_user() {
-    if [ -n "${SUDO_USER:-}" ]; then
-        echo "$SUDO_USER"
-    elif [ -n "${DOAS_USER:-}" ]; then
-        echo "$DOAS_USER"
-    else
-        echo ""
-    fi
-}
-
-# Run command as original user (not root)
-run_as_user() {
-    local user=$(get_original_user)
-    if [ -n "$user" ]; then
-        sudo -u "$user" "$@"
-    else
-        "$@"
-    fi
-}
-
-# Run winetricks as the original user with proper environment
-run_winetricks_as_user() {
-    local user=$(get_original_user)
-    if [ -z "$user" ]; then
-        print_warning "Cannot determine original user, skipping winetricks configuration"
-        return 1
-    fi
-    
-    print_info "Running winetricks as user: $user"
-    
-    # Get user's home directory
-    local user_home=$(getent passwd "$user" | cut -d: -f6)
-    
-    # Run winetricks with user's environment
-    sudo -u "$user" \
-        HOME="$user_home" \
-        WINEARCH=win32 \
-        WINEPREFIX="${user_home}/.wine" \
-        winetricks --unattended "$@" 2>/dev/null || return 1
-    
-    return 0
-}
-
-log_msg() {
-    echo -e "$1" | tee -a "$LOG_FILE"
-}
-
-# Check if a package is installed (distro-specific)
-package_installed() {
-    local pkg="$1"
-    case "$DISTRO_FAMILY" in
-        debian)
-            dpkg -l "$pkg" 2>/dev/null | grep -q "^ii"
-            ;;
-        fedora)
-            rpm -q "$pkg" &> /dev/null
-            ;;
-        arch)
-            pacman -Q "$pkg" &> /dev/null
-            ;;
-        suse)
-            rpm -q "$pkg" &> /dev/null
-            ;;
-        *)
-            return 1
-            ;;
-    esac
-}
 
 # Install package only if not already installed
 install_package() {
@@ -198,110 +129,6 @@ print_success() {
     echo -e "${GREEN}✓ $1${NC}"
 }
 
-print_error() {
-    echo -e "${RED}✗ $1${NC}"
-}
-
-print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
-}
-
-print_info() {
-    echo -e "${CYAN}ℹ $1${NC}"
-}
-
-command_exists() {
-    command -v "$1" &> /dev/null
-}
-
-detect_distro() {
-    if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        DISTRO="$ID"
-        DISTRO_NAME="$NAME"
-        
-        # Detect distro family
-        case "$ID" in
-            ubuntu|debian|linuxmint|pop|elementary|zorin|kubuntu|xubuntu|lubuntu|neon)
-                DISTRO_FAMILY="debian"
-                ;;
-            fedora|rhel|centos|rocky|almalinux|nobara)
-                DISTRO_FAMILY="fedora"
-                ;;
-            arch|manjaro|endeavouros|garuda|cachyos|artix)
-                DISTRO_FAMILY="arch"
-                ;;
-            opensuse*|suse*)
-                DISTRO_FAMILY="suse"
-                ;;
-            *)
-                DISTRO_FAMILY="unknown"
-                ;;
-        esac
-    else
-        print_error "Cannot detect Linux distribution"
-        exit 1
-    fi
-    
-    ARCH=$(uname -m)
-    
-    # Detect GPU
-    if lspci | grep -i nvidia &> /dev/null; then
-        GPU_VENDOR="nvidia"
-    elif lspci | grep -i amd &> /dev/null; then
-        GPU_VENDOR="amd"
-    elif lspci | grep -i intel &> /dev/null; then
-        GPU_VENDOR="intel"
-    else
-        GPU_VENDOR="unknown"
-    fi
-    
-    # Check for whiptail (like Dennis Hilk's version)
-    if command_exists whiptail; then
-        USE_WHIPTAIL=true
-    fi
-}
-
-check_root() {
-    if [ "$EUID" -ne 0 ]; then
-        print_error "This script must be run as root (use sudo)"
-        exit 1
-    fi
-}
-
-backup_file() {
-    local file="$1"
-    if [ -f "$file" ]; then
-        cp "$file" "${file}.backup.$(date +%Y%m%d_%H%M%S)"
-        print_info "Backup created: ${file}.backup.$(date +%Y%m%d_%H%M%S)"
-    fi
-}
-
-# ============================================================================
-# SYSTEM UPDATE
-# ============================================================================
-
-update_system() {
-    print_section "📦 Updating System Packages"
-    
-    case "$DISTRO_FAMILY" in
-        debian)
-            apt update && apt upgrade -y
-            ;;
-        fedora)
-            dnf upgrade -y
-            ;;
-        arch)
-            pacman -Syu --noconfirm
-            ;;
-        suse)
-            zypper refresh && zypper update -y
-            ;;
-    esac
-    
-    print_success "System updated successfully"
-}
-
 # ============================================================================
 # ENABLE 32-BIT SUPPORT
 # ============================================================================
@@ -320,10 +147,16 @@ enable_multilib() {
             ;;
         arch)
             if ! grep -q "^\[multilib\]" /etc/pacman.conf; then
-                echo "[multilib]" >> /etc/pacman.conf
-                echo "Include = /etc/pacman.d/mirrorlist" >> /etc/pacman.conf
+                print_info "Enabling multilib repository..."
+                cat >> /etc/pacman.conf << 'EOF'
+
+[multilib]
+Include = /etc/pacman.d/mirrorlist
+EOF
                 pacman -Sy
                 print_success "Multilib repository enabled"
+            else
+                print_info "Multilib repository already enabled"
             fi
             ;;
         suse)
@@ -426,19 +259,30 @@ install_nvidia_drivers() {
         driver_branch="legacy"
     fi
     
-    echo ""
-    echo "Choose NVIDIA driver option:"
-    echo ""
-    echo "  1) Proprietary driver (closed-source, best performance - RECOMMENDED)"
-    echo "  2) Open kernel modules (open-source kernel, proprietary userspace)"
-    echo "     - For Turing (RTX 20) and newer GPUs"
-    echo "     - Better for Wayland, container workloads"
-    echo "  3) Nouveau (fully open-source, limited gaming performance)"
-    echo "  4) Skip driver installation"
-    echo ""
-    read -p "Enter choice [1-4]: " nvidia_choice
+    local choice=""
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        if [ "${AUTO_GPU_NVIDIA:-false}" = "true" ]; then
+            choice="1"
+            print_info "Auto-selecting NVIDIA proprietary driver"
+        else
+            choice="4"
+            print_info "Auto-skipping NVIDIA driver installation"
+        fi
+    else
+        echo ""
+        echo "Choose NVIDIA driver option:"
+        echo ""
+        echo "  1) Proprietary driver (closed-source, best performance - RECOMMENDED)"
+        echo "  2) Open kernel modules (open-source kernel, proprietary userspace)"
+        echo "     - For Turing (RTX 20) and newer GPUs"
+        echo "     - Better for Wayland, container workloads"
+        echo "  3) Nouveau (fully open-source, limited gaming performance)"
+        echo "  4) Skip driver installation"
+        echo ""
+        read -p "Enter choice [1-4]: " choice
+    fi
     
-    case "$nvidia_choice" in
+    case "$choice" in
         1)
             install_nvidia_proprietary "$driver_branch"
             ;;
@@ -782,19 +626,30 @@ install_amd_drivers() {
         print_info "AMDGPU-PRO proprietary driver detected"
     fi
     
-    echo ""
-    echo "Choose driver option:"
-    echo "  1) Mesa open-source drivers (recommended for gaming)"
-    if [ "$has_proprietary" = true ]; then
-        echo "  2) Keep/update AMDGPU-PRO proprietary driver"
+    local choice=""
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        if [ "${AUTO_GPU_AMD:-false}" = "true" ]; then
+            choice="1"
+            print_info "Auto-selecting AMD Mesa drivers"
+        else
+            choice="3"
+            print_info "Auto-skipping AMD driver installation"
+        fi
     else
-        echo "  2) Install AMDGPU-PRO proprietary driver (workstation/pro apps)"
+        echo ""
+        echo "Choose driver option:"
+        echo "  1) Mesa open-source drivers (recommended for gaming)"
+        if [ "$has_proprietary" = true ]; then
+            echo "  2) Keep/update AMDGPU-PRO proprietary driver"
+        else
+            echo "  2) Install AMDGPU-PRO proprietary driver (workstation/pro apps)"
+        fi
+        echo "  3) Skip driver installation"
+        echo ""
+        read -p "Enter choice [1-3]: " choice
     fi
-    echo "  3) Skip driver installation"
-    echo ""
-    read -p "Enter choice [1-3]: " amd_choice
     
-    case "$amd_choice" in
+    case "$choice" in
         1)
             install_amd_mesa
             ;;
@@ -1331,18 +1186,31 @@ EOF
 install_gaming_kernel() {
     print_section "🐧 Installing Gaming-Optimized Kernel"
     
-    echo ""
-    echo "Choose a gaming kernel:"
-    echo "  1) XanMod Kernel (Recommended for most systems)"
-    echo "  2) Liquorix Kernel (Low-latency, Debian/Ubuntu only)"
-    echo "  3) Zen Kernel (Balanced, Arch-based)"
-    echo "  4) CachyOS Kernel (Performance-focused, Arch only)"
-    echo "  5) TKG Kernel (Custom builds, advanced users)"
-    echo "  6) Skip kernel installation"
-    echo ""
-    read -p "Enter your choice [1-6]: " kernel_choice
+    local choice=""
+    if [ "${AUTO_INSTALL:-0}" = "1" ] && [ -n "${AUTO_KERNEL:-}" ]; then
+        case "${AUTO_KERNEL,,}" in
+            xanmod) choice="1" ;;
+            liquorix) choice="2" ;;
+            zen) choice="3" ;;
+            cachyos) choice="4" ;;
+            tkg) choice="5" ;;
+            *) choice="6" ;;
+        esac
+        print_info "Auto-selecting kernel option: $AUTO_KERNEL (Choice: $choice)"
+    else
+        echo ""
+        echo "Choose a gaming kernel:"
+        echo "  1) XanMod Kernel (Recommended for most systems)"
+        echo "  2) Liquorix Kernel (Low-latency, Debian/Ubuntu only)"
+        echo "  3) Zen Kernel (Balanced, Arch-based)"
+        echo "  4) CachyOS Kernel (Performance-focused, Arch only)"
+        echo "  5) TKG Kernel (Custom builds, advanced users)"
+        echo "  6) Skip kernel installation"
+        echo ""
+        read -p "Enter your choice [1-6]: " choice
+    fi
     
-    case "$kernel_choice" in
+    case "$choice" in
         1)
             install_xanmod_kernel
             ;;
@@ -1381,7 +1249,6 @@ install_gaming_kernel() {
             ;;
     esac
 }
-
 install_xanmod_kernel() {
     print_info "Installing XanMod Kernel..."
     
@@ -1453,18 +1320,25 @@ install_zen_kernel() {
 install_cachyos_kernel() {
     print_info "Installing CachyOS Kernel..."
     
-    # Add CachyOS repository
-    pacman-key --recv-keys F3B607488DB35A47 --keyserver keyserver.ubuntu.com
-    pacman-key --lsign-key F3B607488DB35A47
-    
-    cat >> /etc/pacman.conf << 'EOF'
+    # Add CachyOS repository if not already present
+    if ! grep -q "^\[cachyos\]" /etc/pacman.conf; then
+        print_info "Adding CachyOS repository to /etc/pacman.conf..."
+        pacman-key --recv-keys F3B607488DB35A47 --keyserver keyserver.ubuntu.com
+        pacman-key --lsign-key F3B607488DB35A47
+        
+        cat >> /etc/pacman.conf << 'EOF'
 
 [cachyos]
 Include = /etc/pacman.d/cachyos-mirrorlist
 EOF
+    else
+        print_info "CachyOS repository already exists in pacman.conf"
+    fi
     
-    # Download mirrorlist
-    curl -o /etc/pacman.d/cachyos-mirrorlist https://raw.githubusercontent.com/CachyOS/CachyOS-PKGBUILDS/master/cachyos-mirrorlist/cachyos-mirrorlist
+    # Download mirrorlist if missing
+    if [ ! -f /etc/pacman.d/cachyos-mirrorlist ]; then
+        curl -o /etc/pacman.d/cachyos-mirrorlist https://raw.githubusercontent.com/CachyOS/CachyOS-PKGBUILDS/master/cachyos-mirrorlist/cachyos-mirrorlist
+    fi
     
     pacman -Sy
     
@@ -1591,12 +1465,21 @@ EOF
 disable_cpu_mitigations() {
     print_section "⚠️ CPU Mitigations Configuration"
     
-    print_warning "Disabling CPU mitigations improves performance but reduces security"
-    print_info "This makes your system vulnerable to Spectre, Meltdown, and similar attacks"
-    echo ""
-    read -p "Do you want to disable CPU mitigations? [y/N]: " disable_mitigations
+    local choice=""
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        if [ "${AUTO_MITIGATIONS:-false}" = "true" ]; then
+            choice="y"
+        else
+            choice="n"
+        fi
+    else
+        print_warning "Disabling CPU mitigations improves performance but reduces security"
+        print_info "This makes your system vulnerable to Spectre, Meltdown, and similar attacks"
+        echo ""
+        read -p "Do you want to disable CPU mitigations? [y/N]: " choice
+    fi
     
-    if [[ "$disable_mitigations" =~ ^[Yy]$ ]]; then
+    if [[ "$choice" =~ ^[Yy]$ ]]; then
         backup_file /etc/default/grub
         
         case "$DISTRO_FAMILY" in
@@ -1605,11 +1488,13 @@ disable_cpu_mitigations() {
                 ;;
             *)
                 # For GRUB-based systems
-                if grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub; then
+                if [ -f /etc/default/grub ] && grep -q "GRUB_CMDLINE_LINUX_DEFAULT" /etc/default/grub; then
                     # Check if mitigations=off is already present
                     if ! grep -q "mitigations=off" /etc/default/grub; then
+                        print_info "Adding mitigations=off to GRUB..."
                         sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT="\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1 mitigations=off"/' /etc/default/grub
-                        sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=" *\([^"]*\)"/GRUB_CMDLINE_LINUX_DEFAULT="\1"/' /etc/default/grub
+                        # Clean up any double spaces
+                        sed -i 's/  */ /g' /etc/default/grub
                         update-grub 2>/dev/null || grub-mkconfig -o /boot/grub/grub.cfg
                     else
                         print_info "mitigations=off already present in GRUB config"
@@ -3602,20 +3487,36 @@ install_additional_tools() {
     install_greenwithenvy
     
     # Install SOBER (Roblox)
-    read -p "Install SOBER for Roblox? [y/N]: " install_sober_choice
-    if [[ "$install_sober_choice" =~ ^[Yy]$ ]]; then
+    local install_s="n"
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        # Default to skip experimental/heavy components in auto install unless requested
+        install_s="n"
+    else
+        read -p "Install SOBER for Roblox? [y/N]: " install_s
+    fi
+    if [[ "$install_s" =~ ^[Yy]$ ]]; then
         install_sober
     fi
     
     # Install Waydroid (Android)
-    read -p "Install Waydroid (Android container)? [y/N]: " install_waydroid_choice
-    if [[ "$install_waydroid_choice" =~ ^[Yy]$ ]]; then
+    local install_w="n"
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        install_w="n"
+    else
+        read -p "Install Waydroid (Android container)? [y/N]: " install_w
+    fi
+    if [[ "$install_w" =~ ^[Yy]$ ]]; then
         install_waydroid
     fi
     
     # Install mod managers
-    read -p "Install mod managers (r2modman)? [y/N]: " install_mods_choice
-    if [[ "$install_mods_choice" =~ ^[Yy]$ ]]; then
+    local install_m="n"
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        install_m="n"
+    else
+        read -p "Install mod managers (r2modman)? [y/N]: " install_m
+    fi
+    if [[ "$install_m" =~ ^[Yy]$ ]]; then
         install_mod_managers
     fi
     
@@ -3995,10 +3896,19 @@ full_setup() {
     install_gpu_drivers
     install_gaming_packages
     
-    # Ask about kernel
-    echo ""
-    read -p "Install gaming kernel? [Y/n]: " install_kernel
-    if [[ ! "$install_kernel" =~ ^[Nn]$ ]]; then
+    # Ask about kernel or use AUTO_KERNEL
+    local install_k="n"
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        if [ -n "${AUTO_KERNEL:-}" ]; then
+            install_k="y"
+        fi
+    else
+        echo ""
+        read -p "Install gaming kernel? [Y/n]: " install_k
+        [ -z "$install_k" ] && install_k="y"
+    fi
+
+    if [[ "$install_k" =~ ^[Yy]$ ]]; then
         install_gaming_kernel
     fi
     
@@ -4060,10 +3970,11 @@ main() {
     # Create log file
     touch "$LOG_FILE"
     
-    # Install whiptail if not present (optional)
-    if ! $USE_WHIPTAIL && [ "$DISTRO_FAMILY" = "debian" ]; then
-        print_info "Installing whiptail for better UI..."
-        apt install -y whiptail 2>/dev/null && USE_WHIPTAIL=true || true
+    # Auto-install support
+    if [ "${AUTO_INSTALL:-0}" = "1" ]; then
+        print_info "Automated installation requested..."
+        full_setup
+        exit 0
     fi
     
     while true; do
