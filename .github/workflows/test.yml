@@ -1,0 +1,114 @@
+name: Test Linux Gaming Toolkit
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  syntax-check:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Check bash syntax
+      run: |
+        bash -n gamingtoolkit.sh
+        bash -n uninstall.sh
+        bash -n modules/utils.sh
+        bash -n modules/detection.sh
+        echo "✅ All scripts have valid syntax"
+    
+    - name: Run shellcheck
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y shellcheck
+        shellcheck -S warning gamingtoolkit.sh || true
+        shellcheck -S warning uninstall.sh || true
+      continue-on-error: true
+
+  test-ubuntu:
+    runs-on: ubuntu-latest
+    container: ubuntu:22.04
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install prerequisites
+      run: |
+        apt-get update
+        apt-get install -y sudo wget curl git lsb-release pciutils whiptail
+    
+    - name: Test distro detection
+      run: |
+        bash -c '
+          source modules/detection.sh
+          detect_distro
+          echo "Distro: $DISTRO_NAME"
+          echo "Family: $DISTRO_FAMILY"
+          [ "$DISTRO_FAMILY" = "debian" ] && echo "✅ Detection works" || exit 1
+        '
+    
+    - name: Test package installation function
+      run: |
+        bash -c '
+          export DISTRO_FAMILY="debian"
+          source modules/utils.sh
+          
+          # Test package detection
+          if package_installed bash; then
+            echo "✅ Package detection works"
+          else
+            echo "❌ Package detection failed"
+            exit 1
+          fi
+          
+          # Test non-existent package
+          if ! package_installed this-package-does-not-exist-12345; then
+            echo "✅ Non-existent package correctly detected"
+          else
+            echo "❌ Non-existent package check failed"
+            exit 1
+          fi
+        '
+
+  test-fedora:
+    runs-on: ubuntu-latest
+    container: fedora:40
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install prerequisites
+      run: |
+        dnf install -y sudo wget curl git pciutils newt
+    
+    - name: Test distro detection
+      run: |
+        bash -c '
+          source modules/detection.sh
+          detect_distro
+          echo "Distro: $DISTRO_NAME"
+          echo "Family: $DISTRO_FAMILY"
+          [ "$DISTRO_FAMILY" = "fedora" ] && echo "✅ Detection works" || exit 1
+        '
+
+  test-arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install prerequisites
+      run: |
+        pacman -Syu --noconfirm
+        pacman -S --noconfirm sudo wget curl git pciutils libnewt
+    
+    - name: Test distro detection
+      run: |
+        bash -c '
+          source modules/detection.sh
+          detect_distro
+          echo "Distro: $DISTRO_NAME"
+          echo "Family: $DISTRO_FAMILY"
+          [ "$DISTRO_FAMILY" = "arch" ] && echo "✅ Detection works" || exit 1
+        '

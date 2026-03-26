@@ -1,0 +1,31 @@
+# Test environment for Ubuntu 22.04
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install basic requirements for the script
+RUN apt-get update && apt-get install -y \
+    sudo \
+    wget \
+    curl \
+    git \
+    lsb-release \
+    software-properties-common \
+    pciutils \
+    whiptail \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a test user
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser:testpass" | chpasswd && \
+    usermod -aG sudo testuser
+
+# Copy the script
+COPY gamingtoolkit.sh /root/gamingtoolkit.sh
+RUN chmod +x /root/gamingtoolkit.sh
+
+# Set up sudo without password for testing
+RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+CMD ["/bin/bash"]

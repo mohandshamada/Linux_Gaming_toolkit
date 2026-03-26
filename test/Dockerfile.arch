@@ -1,0 +1,27 @@
+# Test environment for Arch Linux
+FROM archlinux:latest
+
+# Update and install basic requirements
+RUN pacman -Syu --noconfirm && \
+    pacman -S --noconfirm \
+    sudo \
+    wget \
+    curl \
+    git \
+    pciutils \
+    libnewt \
+    && pacman -Scc --noconfirm
+
+# Create a test user
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser:testpass" | chpasswd && \
+    usermod -aG wheel testuser
+
+# Copy the script
+COPY gamingtoolkit.sh /root/gamingtoolkit.sh
+RUN chmod +x /root/gamingtoolkit.sh
+
+# Set up sudo without password for testing
+RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+CMD ["/bin/bash"]

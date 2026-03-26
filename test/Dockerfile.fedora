@@ -1,0 +1,26 @@
+# Test environment for Fedora 40
+FROM fedora:40
+
+# Install basic requirements
+RUN dnf install -y \
+    sudo \
+    wget \
+    curl \
+    git \
+    pciutils \
+    newt \
+    && dnf clean all
+
+# Create a test user
+RUN useradd -m -s /bin/bash testuser && \
+    echo "testuser:testpass" | chpasswd && \
+    usermod -aG wheel testuser
+
+# Copy the script
+COPY gamingtoolkit.sh /root/gamingtoolkit.sh
+RUN chmod +x /root/gamingtoolkit.sh
+
+# Set up sudo without password for testing
+RUN echo "ALL ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+CMD ["/bin/bash"]
