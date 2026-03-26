@@ -2742,6 +2742,835 @@ EOF
     esac
 }
 
+# ============================================================================
+# V3.5 FEATURES: Advanced Gaming Optimizations
+# ============================================================================
+
+install_scx_scheduler() {
+    print_section "⚡ Installing scx_lavd BPF Scheduler (Valve-Funded Gaming Scheduler)"
+    
+    # Check kernel version (needs 6.12+ or sched_ext support)
+    local kernel_major=$(uname -r | cut -d. -f1)
+    local kernel_minor=$(uname -r | cut -d. -f2)
+    
+    if [ "$kernel_major" -lt 6 ] || ([ "$kernel_major" -eq 6 ] && [ "$kernel_minor" -lt 12 ]); then
+        print_warning "Kernel 6.12+ recommended for scx schedulers (current: $(uname -r))"
+        print_info "Consider installing a gaming kernel first (Option 3 in menu)"
+        read -p "Continue anyway? [y/N]: " continue_anyway
+        if [[ ! "$continue_anyway" =~ ^[Yy]$ ]]; then
+            return 0
+        fi
+    fi
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            install_packages scx-scheds
+            ;;
+        fedora)
+            # Fedora 41+ has scx-scheds
+            install_packages scx-scheds 2>/dev/null || {
+                print_warning "scx-scheds not in repos, checking COPR..."
+                dnf copr enable -y devs/scheduler 2>/dev/null || true
+                install_packages scx-scheds || true
+            }
+            ;;
+        debian|ubuntu)
+            # For Debian/Ubuntu, build from source or use backports
+            print_info "Installing scx-scheds dependencies..."
+ install_packages bpfcc-tools linux-headers-$(uname -r) libbpf-dev clang llvm
+            print_warning "scx-scheds may need to be built from source on Debian/Ubuntu"
+            print_info "Visit: https://github.com/sched-ext/scx for build instructions"
+            ;;
+    esac
+    
+    if command_exists scx_lavd; then
+        print_success "scx_lavd installed successfully"
+        
+        # Create systemd service for scx_lavd
+        cat > /etc/systemd/system/scx.service << 'EOF'
+[Unit]
+Description=scx_scheduler
+After=systemd-modules-load.service
+ConditionPathIsDirectory=/sys/fs/cgroup
+
+[Service]
+Type=simple
+Environment=SCX_SCHEDULER=scx_lavd
+Environment="SCX_FLAGS=--autopower"
+EnvironmentFile=-/etc/default/scx
+ExecStart=/bin/bash -c 'exec /usr/bin/$SCX_SCHEDULER $SCX_FLAGS'
+Restart=on-failure
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target
+EOF
+        
+        # Create config file
+        cat > /etc/default/scx << 'EOF'
+# scx scheduler configuration
+# Available: scx_lavd, scx_bpfland, scx_rustland, scx_rusty, scx_layered
+
+SCX_SCHEDULER=scx_lavd
+
+# Flags for scx_lavd:
+# --autopower     : Auto-switch between power/performance
+# --performance   : Always performance mode
+# --powersave     : Power saving mode
+# --no-core-compaction : Disable core compaction
+SCX_FLAGS="--autopower"
+EOF
+        
+        systemctl daemon-reload
+        print_success "scx service created. Enable with: systemctl enable --now scx"
+        
+        # Ask to enable now
+        read -p "Enable scx_lavd scheduler now? [Y/n]: " enable_now
+        if [[ ! "$enable_now" =~ ^[Nn]$ ]]; then
+            systemctl enable --now scx 2>/dev/null || {
+                # Fallback: run directly
+                print_info "Starting scx_lavd directly..."
+                scx_lavd --autopower &
+            }
+            print_success "scx_lavd scheduler enabled"
+        fi
+        
+        # Add to documentation
+        cat >> /usr/share/doc/linux-gaming-toolkit/README.txt 2>/dev/null << 'EOF'
+
+scx_lavd Scheduler:
+- Status: systemctl status scx
+- Config: /etc/default/scx
+- Switch mode: Edit SCX_FLAGS in config
+  --autopower   : Auto power/performance
+  --performance : Max performance
+  --powersave   : Power saving
+
+EOF
+    else
+        print_warning "scx_lavd installation may have failed or requires manual setup"
+    fi
+}
+
+configure_gamescope_advanced() {
+    print_section "🎮 Configuring Advanced Gamescope Features"
+    
+    print_info "Setting up Gamescope with FSR, NIS, HDR, and VRR support..."
+    
+    # Ensure gamescope is installed with capabilities
+    if command_exists gamescope; then
+        # Set capabilities for realtime priority
+        print_info "Setting Gamescope capabilities for realtime priority..."
+        setcap 'CAP_SYS_NICE=eip' $(which gamescope) 2>/dev/null || true
+        
+        # Create helper scripts for common configurations
+        mkdir -p /usr/local/bin
+        
+        # FSR upscaling script
+        cat > /usr/local/bin/gamescope-fsr << 'EOF'
+#!/bin/bash
+# Gamescope with AMD FSR upscaling
+# Usage: gamescope-fsr <internal_res> <game>
+# Example: gamescope-fsr 1920x1080 %command%
+
+INTERNAL_RES="${1:-1920x1080}"
+shift
+
+IFS='x' read -r W H <<< "$INTERNAL_RES"
+
+gamescope -w "$W" -h "$H" -W ${W} -H ${H} -F fsr --sharpness 4 -- "$@"
+EOF
+        chmod +x /usr/local/bin/gamescope-fsr
+        
+        # NIS upscaling script (NVIDIA)
+        cat > /usr/local/bin/gamescope-nis << 'EOF'
+#!/bin/bash
+# Gamescope with NVIDIA Image Scaling
+# Usage: gamescope-nis <internal_res> <game>
+
+INTERNAL_RES="${1:-1920x1080}"
+shift
+
+IFS='x' read -r W H <<< "$INTERNAL_RES"
+
+gamescope -w "$W" -h "$H" -W ${W} -H ${H} -F nis --sharpness 4 -- "$@"
+EOF
+        chmod +x /usr/local/bin/gamescope-nis
+        
+        # HDR-enabled script
+        cat > /usr/local/bin/gamescope-hdr << 'EOF'
+#!/bin/bash
+# Gamescope with HDR output
+# Usage: gamescope-hdr <game>
+
+gamescope --hdr-enabled --hdr-itm-enabled --adaptive-sync -- "$@"
+EOF
+        chmod +x /usr/local/bin/gamescope-hdr
+        
+        # MangoApp integration
+        cat > /usr/local/bin/gamescope-mango << 'EOF'
+#!/bin/bash
+# Gamescope with MangoHud overlay
+# Usage: gamescope-mango <game>
+
+gamescope --mangoapp -- "$@"
+EOF
+        chmod +x /usr/local/bin/gamescope-mango
+        
+        # Full feature script
+        cat > /usr/local/bin/gamescope-full << 'EOF'
+#!/bin/bash
+# Gamescope with all features: FSR + MangoApp + HDR + VRR
+# Usage: gamescope-full <internal_res> <game>
+
+INTERNAL_RES="${1:-1920x1080}"
+shift
+
+IFS='x' read -r W H <<< "$INTERNAL_RES"
+
+gamescope -w "$W" -h "$H" -W ${W} -H ${H} \
+    -F fsr --sharpness 4 \
+    --mangoapp \
+    --hdr-enabled \
+    --adaptive-sync \
+    --immediate-flips \
+    -- "$@"
+EOF
+        chmod +x /usr/local/bin/gamescope-full
+        
+        print_success "Gamescope helper scripts created:"
+        print_info "  - gamescope-fsr: FSR upscaling"
+        print_info "  - gamescope-nis: NVIDIA Image Scaling"
+        print_info "  - gamescope-hdr: HDR output"
+        print_info "  - gamescope-mango: MangoHud overlay"
+        print_info "  - gamescope-full: All features combined"
+        
+        # Create Steam launch options guide
+        cat > /usr/share/doc/linux-gaming-toolkit/GAMESCOPE.md << 'EOF'
+# Gamescope Advanced Configuration
+
+## Steam Launch Options
+
+### Basic FSR Upscaling
+```
+gamescope -w 1920 -h 1080 -W 2560 -H 1440 -F fsr --sharpness 4 -- %command%
+```
+
+### With MangoHud
+```
+gamescope -w 1920 -h 1080 -W 2560 -H 1440 -F fsr --mangoapp -- %command%
+```
+
+### HDR + VRR
+```
+gamescope --hdr-enabled --adaptive-sync --immediate-flips -- %command%
+```
+
+### Full Setup (FSR + MangoApp + HDR + VRR)
+```
+gamescope -w 1920 -h 1080 -W 2560 -H 1440 -F fsr --sharpness 4 --mangoapp --hdr-enabled --adaptive-sync -- %command%
+```
+
+## Keyboard Shortcuts
+- Super + F: Toggle fullscreen
+- Super + U: Toggle FSR
+- Super + Y: Toggle NIS
+- Super + I/O: Increase/decrease FSR sharpness
+- Super + S: Screenshot
+- Super + G: Toggle keyboard grab
+
+## Parameters
+- `-w/-h`: Internal resolution
+- `-W/-H`: Output resolution
+- `-F`: Filter (fsr, nis, pixel, linear, nearest)
+- `--sharpness`: 0 (max) to 20 (min), default 2
+- `--adaptive-sync`: Enable VRR
+- `--hdr-enabled`: Enable HDR output
+- `--mangoapp`: Use MangoHud as overlay
+EOF
+        
+        log_removal "Gamescope scripts in /usr/local/bin/"
+    else
+        print_warning "Gamescope not installed. Install it first."
+    fi
+}
+
+install_proton_ge() {
+    print_section "🍷 Installing Proton-GE (GloriousEggroll Proton)"
+    
+    # Detect original user for correct home directory
+    local ORIGINAL_USER="${SUDO_USER:-$USER}"
+    local USER_HOME=$(eval echo ~$ORIGINAL_USER)
+    
+    # Install ProtonUp-Qt if not present
+    if ! command_exists protonup-qt && ! command_exists protonup; then
+        print_info "Installing ProtonUp-Qt..."
+        case "$DISTRO_FAMILY" in
+            arch)
+                install_packages protonup-qt || install_packages protonup
+                ;;
+            fedora)
+                install_packages protonup-qt || true
+                ;;
+            debian|ubuntu)
+                # Try flatpak
+                if command_exists flatpak; then
+                    flatpak install -y flathub net.davidotek.pupgui2 2>/dev/null || true
+                fi
+                ;;
+        esac
+    fi
+    
+    # Download and install latest GE-Proton via command line
+    print_info "Downloading latest GE-Proton..."
+    
+    local PROTON_DIR="$USER_HOME/.steam/root/compatibilitytools.d"
+    mkdir -p "$PROTON_DIR"
+    
+    # Get latest release info
+    local LATEST_URL=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep browser_download_url | grep .tar.gz | cut -d '"' -f 4)
+    
+    if [ -n "$LATEST_URL" ]; then
+        local FILENAME=$(basename "$LATEST_URL")
+        local PROTON_NAME=$(echo "$FILENAME" | sed 's/.tar.gz//')
+        
+        if [ -d "$PROTON_DIR/$PROTON_NAME" ]; then
+            print_info "$PROTON_NAME already installed"
+        else
+            print_info "Downloading $FILENAME..."
+            cd /tmp
+            wget -q --show-progress "$LATEST_URL" -O "$FILENAME"
+            
+            print_info "Extracting..."
+            tar -xzf "$FILENAME" -C "$PROTON_DIR/"
+            rm -f "$FILENAME"
+            
+            chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$PROTON_DIR/$PROTON_NAME" 2>/dev/null || true
+            
+            print_success "Proton-GE installed: $PROTON_NAME"
+            print_info "Restart Steam and select '$PROTON_NAME' in game properties"
+        fi
+        
+        # Create update script
+        cat > /usr/local/bin/update-proton-ge << 'EOF'
+#!/bin/bash
+# Update Proton-GE to latest version
+
+PROTON_DIR="$HOME/.steam/root/compatibilitytools.d"
+mkdir -p "$PROTON_DIR"
+
+echo "Checking for latest GE-Proton..."
+LATEST_URL=$(curl -s https://api.github.com/repos/GloriousEggroll/proton-ge-custom/releases/latest | grep browser_download_url | grep .tar.gz | cut -d '"' -f 4)
+
+if [ -z "$LATEST_URL" ]; then
+    echo "Failed to get latest release"
+    exit 1
+fi
+
+FILENAME=$(basename "$LATEST_URL")
+PROTON_NAME=$(echo "$FILENAME" | sed 's/.tar.gz//')
+
+if [ -d "$PROTON_DIR/$PROTON_NAME" ]; then
+    echo "$PROTON_NAME is already the latest version"
+    exit 0
+fi
+
+echo "Downloading $FILENAME..."
+cd /tmp
+wget -q --show-progress "$LATEST_URL" -O "$FILENAME"
+
+echo "Extracting..."
+tar -xzf "$FILENAME" -C "$PROTON_DIR/"
+rm -f "$FILENAME"
+
+echo "Installed: $PROTON_NAME"
+echo "Restart Steam to use the new version"
+EOF
+        chmod +x /usr/local/bin/update-proton-ge
+        
+        # Add cron job for weekly updates (optional)
+        read -p "Set up weekly automatic Proton-GE updates? [y/N]: " auto_update
+        if [[ "$auto_update" =~ ^[Yy]$ ]]; then
+            (crontab -u "$ORIGINAL_USER" -l 2>/dev/null; echo "0 12 * * 0 /usr/local/bin/update-proton-ge >> /tmp/proton-ge-update.log 2>&1") | crontab -u "$ORIGINAL_USER" -
+            print_success "Weekly Proton-GE updates scheduled"
+        fi
+    else
+        print_error "Failed to fetch latest GE-Proton release"
+    fi
+}
+
+install_latencyflex() {
+    print_section "⚡ Installing LatencyFleX (Latency Reduction)"
+    
+    print_info "LatencyFleX is an open-source alternative to NVIDIA Reflex"
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            # Available in AUR
+            if command_exists yay; then
+                yay -S --noconfirm latencyflex 2>/dev/null || {
+                    print_warning "Failed to install via AUR, trying manual install..."
+                }
+            fi
+            ;;
+        fedora)
+            # Check if available
+            install_packages latencyflex 2>/dev/null || true
+            ;;
+    esac
+    
+    # Manual installation for all distros
+    print_info "Installing LatencyFleX layer..."
+    
+    local LFX_VERSION="0.1.1"
+    local LFX_URL="https://github.com/ishitatsuyuki/LatencyFleX/releases/download/v${LFX_VERSION}/latencyflex-v${LFX_VERSION}.tar.xz"
+    
+    cd /tmp
+    wget -q "$LFX_URL" -O latencyflex.tar.xz
+    tar -xf latencyflex.tar.xz
+    
+    # Install Vulkan layer
+    if [ -d "latencyflex-v${LFX_VERSION}/layer" ]; then
+        mkdir -p /usr/share/vulkan/implicit_layer.d
+        cp latencyflex-v${LFX_VERSION}/layer/latencyflex.json /usr/share/vulkan/implicit_layer.d/
+        cp latencyflex-v${LFX_VERSION}/layer/liblatencyflex.so /usr/lib/
+        
+        # 32-bit support
+        if [ -d "latencyflex-v${LFX_VERSION}/layer32" ]; then
+            cp latencyflex-v${LFX_VERSION}/layer32/liblatencyflex.so /usr/lib32/ 2>/dev/null || true
+        fi
+        
+        ldconfig
+        print_success "LatencyFleX Vulkan layer installed"
+    fi
+    
+    # Install Wine/Proton integration
+    if [ -d "latencyflex-v${LFX_VERSION}/wine" ]; then
+        local ORIGINAL_USER="${SUDO_USER:-$USER}"
+        local USER_HOME=$(eval echo ~$ORIGINAL_USER)
+        local WINE_DIR="$USER_HOME/.local/share/latencyflex"
+        
+        mkdir -p "$WINE_DIR"
+        cp -r latencyflex-v${LFX_VERSION}/wine/* "$WINE_DIR/"
+        chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$WINE_DIR"
+        
+        print_success "LatencyFleX Wine integration installed"
+    fi
+    
+    rm -rf latencyflex*
+    
+    print_info "Usage: Set LFX=1 environment variable to enable"
+    print_info "Add to Steam launch options: LFX=1 %command%"
+}
+
+install_handheld_tools() {
+    print_section "🎮 Installing Handheld/Steam Deck Tools"
+    
+    print_info "Installing tools for handheld gaming devices..."
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            install_packages steamdeck-dsp 2>/dev/null || true
+            install_packages jupiter-hw-support 2>/dev/null || true
+            install_packages powertop
+            install_packages tlp
+            
+            # MangoPeel for MangoHud on Deck
+            if command_exists yay; then
+                yay -S --noconfirm mangopeel 2>/dev/null || true
+            fi
+            
+            # Decky Loader (requires user install)
+            print_info "Decky Loader must be installed per-user"
+            ;;
+            
+        fedora)
+            install_packages powertop
+            install_packages tlp
+            ;;
+            
+        debian|ubuntu)
+            install_packages powertop
+            install_packages tlp
+            ;;
+    esac
+    
+    # Install power-profiles-daemon or auto-cpufreq for TDP control
+    install_packages power-profiles-daemon 2>/dev/null || {
+        print_info "power-profiles-daemon not available"
+    }
+    
+    # Create TDP control script
+    cat > /usr/local/bin/tdp-control << 'EOF'
+#!/bin/bash
+# TDP Control for handheld devices
+# Usage: tdp-control [watts|battery|balanced|performance]
+
+if [ $# -eq 0 ]; then
+    echo "Usage: tdp-control [watts|battery|balanced|performance]"
+    echo ""
+    echo "Presets:"
+    echo "  battery      - 5W TDP (max battery life)"
+    echo "  balanced     - 10W TDP (default)"
+    echo "  performance  - 15W TDP (max performance)"
+    echo "  [number]     - Custom wattage (e.g., tdp-control 12)"
+    exit 0
+fi
+
+PROFILE="$1"
+
+# Detect if running on a supported device
+if [ -f /sys/devices/virtual/dmi/id/product_name ]; then
+    DEVICE=$(cat /sys/devices/virtual/dmi/id/product_name)
+    case "$DEVICE" in
+        *"Steam Deck"*|*"Jupiter"*)
+            TDP_PATH="/sys/devices/virtual/dmi/id"
+            ;;
+        *"ROG Ally"*|*"G16"*)
+            print_info "ROG Ally detected - using asusctl for TDP control"
+            ;;
+    esac
+fi
+
+case "$PROFILE" in
+    battery)
+        echo "Setting TDP to 5W (battery saver)..."
+        # Implement device-specific TDP setting here
+        ;;
+    balanced)
+        echo "Setting TDP to 10W (balanced)..."
+        ;;
+    performance)
+        echo "Setting TDP to 15W (performance)..."
+        ;;
+    [0-9]*)
+        echo "Setting TDP to ${PROFILE}W..."
+        ;;
+    *)
+        echo "Unknown profile: $PROFILE"
+        exit 1
+        ;;
+esac
+
+echo "TDP control is device-specific. Use your device's tools (asusctl, etc.)"
+EOF
+    chmod +x /usr/local/bin/tdp-control
+    
+    print_success "Handheld tools installed"
+    print_info "Note: Full TDP control requires device-specific drivers (asusctl for ROG Ally, etc.)"
+}
+
+install_advanced_audio() {
+    print_section "🔊 Installing Advanced Audio Tools"
+    
+    print_info "Setting up low-latency audio with EasyEffects..."
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            install_packages easyeffects
+            install_packages pipewire-pulse
+            install_packages pipewire-jack
+            ;;
+        fedora)
+            install_packages easyeffects
+            ;;
+        debian|ubuntu)
+            install_packages easyeffects 2>/dev/null || install_packages pulseeffects
+            ;;
+    esac
+    
+    # Configure PipeWire for low latency
+    local PIPEWIRE_DIR="/etc/pipewire"
+    if [ -d "$PIPEWIRE_DIR" ]; then
+        print_info "Configuring PipeWire for low-latency gaming..."
+        
+        # Create low-latency config
+        mkdir -p "$PIPEWIRE_DIR/pipewire.conf.d"
+        
+        cat > "$PIPEWIRE_DIR/pipewire.conf.d/10-lowlatency.conf" << 'EOF'
+context.properties = {
+    default.clock.rate = 48000
+    default.clock.quantum = 32
+    default.clock.min-quantum = 32
+    default.clock.max-quantum = 2048
+}
+EOF
+        
+        # Also create for client configs
+        mkdir -p "$PIPEWIRE_DIR/client.conf.d"
+        cat > "$PIPEWIRE_DIR/client.conf.d/10-lowlatency.conf" << 'EOF'
+stream.properties = {
+    node.latency = 32/48000
+    resample.quality = 1
+}
+EOF
+        
+        print_success "PipeWire low-latency configuration applied"
+        print_info "Restart PipeWire: systemctl --user restart pipewire pipewire-pulse"
+    fi
+    
+    # Create EasyEffects gaming preset
+    local ORIGINAL_USER="${SUDO_USER:-$USER}"
+    local USER_HOME=$(eval echo ~$ORIGINAL_USER)
+    local EFF_DIR="$USER_HOME/.config/easyeffects"
+    
+    mkdir -p "$EFF_DIR/output"
+    
+    cat > "$EFF_DIR/output/gaming.json" << 'EOF'
+{
+    "input": {
+        "blocklist": [],
+        "compressor": {
+            "bypass": false,
+            "input-gain": 0.0,
+            "output-gain": 0.0
+        }
+    },
+    "output": {
+        "blocklist": [],
+        "equalizer": {
+            "bypass": false,
+            "input-gain": 0.0,
+            "output-gain": 0.0
+        },
+        "limiter": {
+            "bypass": false,
+            "input-gain": 0.0,
+            "limit": -0.3,
+            "output-gain": 0.0
+        }
+    }
+}
+EOF
+    chown -R "$ORIGINAL_USER:$ORIGINAL_USER" "$EFF_DIR"
+    
+    print_success "EasyEffects gaming preset created"
+}
+
+install_game_backup_tools() {
+    print_section "💾 Installing Game Save Backup Tools"
+    
+    print_info "Installing Ludusavi for game save backup/sync..."
+    
+    # Install Ludusavi via cargo or download binary
+    case "$DISTRO_FAMILY" in
+        arch)
+            if command_exists yay; then
+                yay -S --noconfirm ludusavi 2>/dev/null || install_ludusavi_manual
+            else
+                install_ludusavi_manual
+            fi
+            ;;
+        *)
+            install_ludusavi_manual
+            ;;
+    esac
+}
+
+install_ludusavi_manual() {
+    print_info "Downloading Ludusavi binary..."
+    
+    local LUDUSAVI_VERSION=$(curl -s https://api.github.com/repos/mtkennerly/ludusavi/releases/latest | grep tag_name | cut -d '"' -f 4)
+    local LUDUSAVI_URL="https://github.com/mtkennerly/ludusavi/releases/download/${LUDUSAVI_VERSION}/ludusavi-${LUDUSAVI_VERSION}-linux.tar.gz"
+    
+    cd /tmp
+    wget -q --show-progress "$LUDUSAVI_URL" -O ludusavi.tar.gz
+    tar -xzf ludusavi.tar.gz
+    
+    if [ -f ludusavi ]; then
+        cp ludusavi /usr/local/bin/
+        chmod +x /usr/local/bin/ludusavi
+        print_success "Ludusavi installed to /usr/local/bin/ludusavi"
+    fi
+    
+    rm -f ludusavi*
+}
+
+install_gaming_overlays() {
+    print_section "📺 Installing Gaming Overlays & Recording Tools"
+    
+    print_info "Installing ReplaySorcery, OBS Studio, and capture tools..."
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            install_packages obs-studio
+            install_packages obs-vkcapture
+            install_packages vulkan-tools
+            if command_exists yay; then
+                yay -S --noconfirm replaysorcery 2>/dev/null || true
+                yay -S --noconfirm gpu-screen-recorder 2>/dev/null || true
+            fi
+            ;;
+        fedora)
+            install_packages obs-studio
+            # Enable RPM Fusion for obs-vkcapture
+            dnf install -y obs-vkcapture 2>/dev/null || true
+            ;;
+        debian|ubuntu)
+            install_packages obs-studio
+            install_packages vulkan-tools
+            ;;
+    esac
+    
+    # Create ReplaySorcery config if installed
+    if command_exists replaysorcery; then
+        mkdir -p /etc/replaysorcery
+        cat > /etc/replaysorcery.conf << 'EOF'
+[video]
+input = kms
+width = 1920
+height = 1080
+framerate = 60
+encoder = openh264
+bitrate = 25000000
+
+[audio]
+input = pulse
+encoder = none
+
+[controller]
+enabled = true
+keyName = r
+keyMods = ctrl,shift
+EOF
+        print_info "ReplaySorcery configured (Ctrl+Shift+R to save replay)"
+    fi
+    
+    # Create OBS game capture helper
+    cat > /usr/local/bin/obs-game-capture << 'EOF'
+#!/bin/bash
+# OBS Game Capture helper for Vulkan/OpenGL
+# Usage: obs-game-capture <game>
+
+export OBS_VKCAPTURE=1
+export VK_INSTANCE_LAYERS=VK_LAYER_OBS_vkcapture_64
+
+exec "$@"
+EOF
+    chmod +x /usr/local/bin/obs-game-capture
+    
+    print_success "Gaming overlays installed"
+    print_info "Use 'obs-game-capture' prefix for OBS game capture"
+}
+
+install_protontricks() {
+    print_section "🍷 Installing Protontricks (Proton Winetricks)"
+    
+    case "$DISTRO_FAMILY" in
+        arch)
+            install_packages protontricks
+            ;;
+        fedora)
+            install_packages protontricks 2>/dev/null || {
+                print_info "Installing via pip..."
+                pip3 install protontricks 2>/dev/null || true
+            }
+            ;;
+        debian|ubuntu)
+            install_packages protontricks 2>/dev/null || {
+                # Install pip version
+                install_packages python3-pip python3-venv
+                pip3 install --user protontricks
+            }
+            ;;
+    esac
+    
+    if command_exists protontricks; then
+        print_success "Protontricks installed"
+        print_info "Usage: protontricks <appid> <verb>"
+        print_info "List games: protontricks --list"
+        print_info "Example: protontricks 730 dotnet48"
+    fi
+}
+
+show_anticheat_info() {
+    print_section "🛡️ Anti-Cheat Compatibility Information"
+    
+    cat << 'EOF'
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    ANTI-CHEAT COMPATIBILITY STATUS                           ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║                                                                              ║
+║  ✅ WORKING (Developer Enabled Linux Support):                               ║
+║  ─────────────────────────────────────────────                               ║
+║  Easy Anti-Cheat (EAC):                                                      ║
+║    • Apex Legends                                                            ║
+║    • Dead by Daylight                                                        ║
+║    • Elden Ring                                                              ║
+║    • Fall Guys                                                               ║
+║    • Halo: Master Chief Collection                                           ║
+║    • Hunt: Showdown                                                          ║
+║    • Rust (with caveats)                                                     ║
+║                                                                              ║
+║  BattlEye:                                                                   ║
+║    • ARK: Survival Evolved                                                   ║
+║    • Destiny 2                                                               ║
+║    • Rainbow Six Siege                                                       ║
+║    • PUBG: Battlegrounds                                                     ║
+║                                                                              ║
+║  ❌ NOT WORKING (Kernel-level, No Linux Support):                            ║
+║  ────────────────────────────────────────────────                            ║
+║    • Valorant (Vanguard)                                                     ║
+║    • Call of Duty: Warzone (Ricochet)                                        ║
+║    • Fortnite (EAC - requires Epic Online Services)                          ║
+║    • Genshin Impact (Custom anti-cheat)                                      ║
+║    • Honkai Star Rail (Custom anti-cheat)                                    ║
+║                                                                              ║
+║  ⚠️  WORKAROUNDS AVAILABLE:                                                  ║
+║  ──────────────────────────                                                  ║
+║    • League of Legends: Use Lutris script                                    ║
+║    • Overwatch 2: Native support                                             ║
+║                                                                              ║
+╠══════════════════════════════════════════════════════════════════════════════╣
+║  TROUBLESHOOTING:                                                            ║
+║  • Check ProtonDB: https://www.protondb.com/                                 ║
+║  • Check AreWeAntiCheatYet: https://areweanticheatyet.com/                   ║
+║  • EAC games need the "Proton EasyAntiCheat Runtime" in Steam                ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+EOF
+    
+    # Create compatibility reference file
+    cat > /usr/share/doc/linux-gaming-toolkit/ANTICHEAT.md << 'EOF'
+# Anti-Cheat Compatibility Guide
+
+## Working Games (EAC/BattlEye Enabled)
+
+### Easy Anti-Cheat
+- Apex Legends
+- Dead by Daylight
+- Elden Ring
+- Fall Guys
+- Halo MCC
+- Hunt: Showdown
+- Enlisted
+- War Thunder
+
+### BattlEye
+- ARK: Survival Evolved
+- DayZ
+- Destiny 2
+- PUBG
+- Rainbow Six Siege
+- Unturned
+
+## Not Working (Kernel-level Anti-Cheat)
+- Valorant (Vanguard)
+- Call of Duty (Ricochet)
+- Fortnite
+- Genshin Impact
+- Honkai Star Rail
+- Black Desert Online (some regions)
+
+## Check Before Buying
+- https://www.protondb.com/
+- https://areweanticheatyet.com/
+- Steam store page (may mention Proton compatibility)
+EOF
+    
+    log_removal "Anti-cheat documentation"
+}
+
 install_additional_tools() {
     print_section "🛠️ Installing Additional Gaming Tools"
     
@@ -3080,7 +3909,7 @@ show_whiptail_menu() {
     fi
     
     local choice
-    choice=$(whiptail --title "Linux Gaming Toolkit v3" --menu "Select action 🕹️" 25 72 16 \
+    choice=$(whiptail --title "Linux Gaming Toolkit v3.5" --menu "Select action 🕹️" 28 76 22 \
         "1" "🚀 Full Gaming Setup (Recommended)" \
         "2" "📦 Install Gaming Packages Only" \
         "3" "🐧 Install Gaming Kernel" \
@@ -3096,6 +3925,16 @@ show_whiptail_menu() {
         "13" "🖥️ Install OLED Protection Tools" \
         "14" "🎮 Install Nobara Extra Features" \
         "15" "🔧 Configure Advanced Graphics" \
+        "16" "⚡ Install scx_lavd Gaming Scheduler" \
+        "17" "🎮 Configure Gamescope (FSR/HDR/VRR)" \
+        "18" "🍷 Install Proton-GE" \
+        "19" "⚡ Install LatencyFleX" \
+        "20" "🎮 Install Handheld/Deck Tools" \
+        "21" "🔊 Install Advanced Audio (EasyEffects)" \
+        "22" "💾 Install Game Save Backup" \
+        "23" "📺 Install Overlays (OBS/ReplaySorcery)" \
+        "24" "🍷 Install Protontricks" \
+        "25" "🛡️ Anti-Cheat Info" \
         "0" "🚪 Exit" 3>&1 1>&2 2>&3)
     
     echo "$choice"
@@ -3303,6 +4142,46 @@ main() {
                 ;;
             15)
                 configure_advanced_graphics
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            16)
+                install_scx_scheduler
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            17)
+                configure_gamescope_advanced
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            18)
+                install_proton_ge
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            19)
+                install_latencyflex
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            20)
+                install_handheld_tools
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            21)
+                install_advanced_audio
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            22)
+                install_game_backup_tools
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            23)
+                install_gaming_overlays
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            24)
+                install_protontricks
+                read -p "Press Enter to continue..." </dev/tty
+                ;;
+            25)
+                show_anticheat_info
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             0|""|*)

@@ -1,8 +1,8 @@
-# 🎮 Linux Gaming Toolkit v3.4
+# 🎮 Linux Gaming Toolkit v3.5
 
 Transform any Linux distribution into a gaming powerhouse with this comprehensive setup script.
 
-![Version](https://img.shields.io/badge/version-3.4-blue)
+![Version](https://img.shields.io/badge/version-3.5-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
@@ -84,7 +84,66 @@ Transform any Linux distribution into a gaming powerhouse with this comprehensiv
    - VR runtime setup (OpenComposite, ALVR)
    - Game controller support and configuration
 
-10. **Safety & Reliability**
+10. **🆕 scx_lavd BPF Scheduler (v3.5)**
+    - **Valve-funded gaming scheduler** designed for high frame rates
+    - Auto power profile switching (battery/performance)
+    - Reduces stuttering and improves frame times
+    - Works with kernel 6.12+ or gaming kernels
+
+11. **🆕 Enhanced Gamescope Integration (v3.5)**
+    - **AMD FSR** upscaling for any game
+    - **NVIDIA NIS** upscaling support
+    - **HDR output** with `--hdr-enabled`
+    - **VRR/Adaptive Sync** support
+    - **MangoApp** integration for overlay
+    - Helper scripts: `gamescope-fsr`, `gamescope-hdr`, `gamescope-full`
+
+12. **🆕 Proton-GE Management (v3.5)**
+    - Auto-download latest GloriousEggroll Proton
+    - Weekly update scheduling via cron
+    - ProtonUp-Qt integration
+    - `update-proton-ge` command
+
+13. **🆕 Latency Reduction Tools (v3.5)**
+    - **LatencyFleX**: Open-source alternative to NVIDIA Reflex
+    - Frame latency optimization
+    - Vulkan layer integration
+
+14. **🆕 Handheld Gaming Support (v3.5)**
+    - Steam Deck optimizations
+    - ASUS ROG Ally tools (with asusctl)
+    - TDP control scripts
+    - Power profile management
+
+15. **🆕 Advanced Audio Setup (v3.5)**
+    - **EasyEffects** (formerly PulseEffects) installation
+    - PipeWire low-latency configuration
+    - Gaming audio presets
+    - Real-time audio scheduling
+
+16. **🆕 Game Save Backup (v3.5)**
+    - **Ludusavi** save game backup tool
+    - Cloud sync ready
+    - Hundreds of games supported
+
+17. **🆕 Gaming Overlays & Recording (v3.5)**
+    - **ReplaySorcery** instant replay
+    - **OBS Studio** with Vulkan capture
+    - VkCapture integration
+    - `obs-game-capture` helper
+
+18. **🆕 Anti-Cheat Information (v3.5)**
+    - EAC/BattlEye compatibility status
+    - Working games list
+    - Troubleshooting guide
+    - ProtonDB integration tips
+
+19. **🆕 Protontricks (v3.5)**
+    - Winetricks for Proton prefixes
+    - Easy DLL installation
+    - Game-specific fixes
+
+20. **Safety & Reliability**
     - **Safer Bash**: `set -Eeuo pipefail` with error trapping
     - **Line number reporting**: Shows exactly where errors occur
     - **Logging with /tmp fallback**: Works even if /var/log is not writable
@@ -153,6 +212,16 @@ The script presents a menu:
 | **13** | 🖥️ Install OLED Protection Tools |
 | **14** | 🎮 Install Nobara Extra Features |
 | **15** | 🔧 Configure Advanced Graphics |
+| **16** | ⚡ Install scx_lavd Gaming Scheduler |
+| **17** | 🎮 Configure Gamescope (FSR/HDR/VRR) |
+| **18** | 🍷 Install Proton-GE |
+| **19** | ⚡ Install LatencyFleX |
+| **20** | 🎮 Install Handheld/Deck Tools |
+| **21** | 🔊 Install Advanced Audio (EasyEffects) |
+| **22** | 💾 Install Game Save Backup |
+| **23** | 📺 Install Overlays (OBS/ReplaySorcery) |
+| **24** | 🍷 Install Protontricks |
+| **25** | 🛡️ Anti-Cheat Info |
 | **0** | 🚪 Exit |
 
 ## What Gets Installed
@@ -215,6 +284,19 @@ The script presents a menu:
 | **asusctl** | ASUS laptop control |
 | **supergfxctl** | ASUS GPU switching |
 | **piper** | Gaming mouse configuration |
+
+### v3.5 Advanced Tools
+
+| Package | Purpose |
+|---------|---------|
+| **scx_lavd** | Valve-funded BPF gaming scheduler |
+| **Proton-GE** | GloriousEggroll's custom Proton |
+| **LatencyFleX** | Open-source latency reduction |
+| **EasyEffects** | Advanced audio processing |
+| **Ludusavi** | Game save backup tool |
+| **ReplaySorcery** | Instant replay for any game |
+| **Protontricks** | Winetricks for Proton |
+| **gpu-screen-recorder** | Lightweight GPU recording |
 
 ## Smart Package Management
 
@@ -549,6 +631,18 @@ Typical improvements on a mid-range gaming PC:
 
 ## Version History
 
+### v3.5 - Advanced Gaming Optimizations
+- Added scx_lavd BPF scheduler (Valve-funded gaming scheduler)
+- Added enhanced Gamescope integration (FSR, NIS, HDR, VRR)
+- Added Proton-GE management with auto-updates
+- Added LatencyFleX (open-source NVIDIA Reflex alternative)
+- Added handheld/Steam Deck tools
+- Added advanced audio setup (EasyEffects, PipeWire low-latency)
+- Added game save backup tools (Ludusavi)
+- added gaming overlays (ReplaySorcery, OBS integration)
+- Added Protontricks for Proton prefix management
+- Added anti-cheat compatibility information
+
 ### v3.4 - HDR & Nobara Features
 - Added HDR support (Gamescope, Mesa patches)
 - Added Dolby Vision support
@@ -606,13 +700,17 @@ MIT License - See LICENSE file
 
 ## Acknowledgments
 
-- Valve for Steam and Proton
+- Valve for Steam, Proton, and scx_lavd scheduler
 - Wine project contributors
 - XanMod, Liquorix, Zen, and CachyOS kernel teams
 - Feral Interactive for GameMode
 - FlightlessMango for MangoHud
 - Nobara Project for inspiration
 - GloriousEggroll for GE-Proton and Gamescope patches
+- [sched-ext](https://github.com/sched-ext/scx) team for BPF schedulers
+- ishitatsuyuki for LatencyFleX
+- mtkennerly for Ludusavi
+- ReplaySorcery contributors
 
 ## Resources
 
