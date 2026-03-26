@@ -1,6 +1,10 @@
+![Banner](banner.png)
+
 # 🎮 Linux Gaming Toolkit v3.6
 
-Transform any Linux distribution into a gaming powerhouse with this comprehensive setup script.
+<img src="logo.png" width="120" align="right">
+
+> Transform any Linux distribution into a gaming powerhouse
 
 ![Version](https://img.shields.io/badge/version-3.6-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
