@@ -1,3 +1,4 @@
+![Banner](banner.png)
 
 # 🎮 Linux Gaming Toolkit
 
