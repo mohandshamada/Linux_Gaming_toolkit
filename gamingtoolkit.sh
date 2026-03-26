@@ -4,7 +4,7 @@
 # This script transforms any Linux distro into a gaming powerhouse
 # Compatible with: Debian/Ubuntu, Fedora, Arch Linux, openSUSE
 #
-# Version: 3.0
+# Version: 3.5
 # Created: 2025
 #
 
