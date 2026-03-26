@@ -4,8 +4,8 @@
 # This script transforms any Linux distro into a gaming powerhouse
 # Compatible with: Debian/Ubuntu, Fedora, Arch Linux, openSUSE
 #
-# Version: 3.5
-# Created: 2025
+# Version: 3.6
+# Created: 2026
 #
 
 # Safer bash settings (matching Dennis Hilk's approach)
@@ -911,19 +911,15 @@ install_debian_gaming_packages() {
     # Core gaming packages
     install_packages gamemode libgamemode0
     
-    # Wine (try different package names)
+    # Wine
     if ! package_installed wine && ! package_installed wine64; then
-        print_info "Installing Wine with Gecko and Mono..."
+        print_info "Installing Wine..."
         apt install -y wine64 wine32 winetricks wine-gecko wine-mono 2>/dev/null || \
         apt install -y wine winetricks 2>/dev/null || \
         apt install -y wine-stable winetricks || true
-    else
-        print_info "Wine already installed"
-        # Try to install gecko and mono anyway
-        install_packages wine-gecko wine-mono || true
     fi
     
-    # Install additional 32-bit libraries for better game compatibility
+    # Install additional 32-bit libraries
     print_info "Installing 32-bit libraries..."
     install_packages \
         lib32-gnutls3:i386 \
@@ -935,10 +931,7 @@ install_debian_gaming_packages() {
         lib32-libxdmcp6:i386 \
         lib32-libxrandr2:i386 \
         lib32-libpulse0:i386 \
-        lib32-alsa2:i386 \
-        lib32-dbus-1-3:i386 \
-        libc6:i386 \
-        libncurses6:i386 || true
+        libc6:i386 || true
     
     install_packages \
         mangohud \
@@ -946,33 +939,40 @@ install_debian_gaming_packages() {
         steam-devices \
         lutris \
         vulkan-tools \
-        vulkan-validationlayers \
         mesa-utils \
         xpad \
-        joystick
+        joystick \
+        input-remapper \
+        obs-vkcapture \
+        vkbasalt
     
+    # Sched-ext support (scx) for Kernels 6.12+
+    local k_ver=$(uname -r | cut -d- -f1)
+    if version_gt "$k_ver" "6.12"; then
+        print_info "Kernel 6.12+ detected, installing scx-utils..."
+        install_packages scx-utils || true
+    fi
+
     # Optional packages
-    install_packages corectrl || print_info "corectrl not available, skipping"
-    install_packages goverlay || print_info "goverlay not available, skipping"
-    install_packages gamescope || print_info "gamescope not available, skipping"
+    install_packages corectrl || print_info "corectrl not available"
+    install_packages goverlay || print_info "goverlay not available"
+    install_packages gamescope || print_info "gamescope not available"
     
-    # Configure winetricks with essential components
+    # Configure winetricks
     if command_exists winetricks; then
-        print_info "Configuring Wine with Winetricks (corefonts, dxvk)..."
-        run_winetricks_as_user corefonts dxvk vcrun2019 || \
-            print_warning "Winetricks configuration failed (run manually as user)"
+        print_info "Configuring Wine with Winetricks..."
+        run_winetricks_as_user corefonts dxvk vcrun2019 || true
     fi
     
-    # Install ProtonUp-Qt
     install_protonupqt
 }
 
 install_fedora_gaming_packages() {
     print_section "📦 Installing Gaming Packages (Fedora)"
     
-    # Enable RPM Fusion if not already
+    # Enable RPM Fusion
     if ! rpm -qa | grep -q rpmfusion-free-release; then
-        print_info "Enabling RPM Fusion repositories..."
+        print_info "Enabling RPM Fusion..."
         dnf install -y https://download1.rpmfusion.org/free/fedora/rpmfusion-free-release-$(rpm -E %fedora).noarch.rpm
     fi
     if ! rpm -qa | grep -q rpmfusion-nonfree-release; then
@@ -995,10 +995,20 @@ install_fedora_gaming_packages() {
         corectrl \
         goverlay \
         gamescope \
+        input-remapper \
+        obs-vkcapture \
+        vkBasalt \
         xpad \
         joystick
     
-    # 32-bit libraries for game compatibility
+    # Sched-ext support (scx)
+    local k_ver=$(uname -r | cut -d- -f1)
+    if version_gt "$k_ver" "6.12"; then
+        print_info "Kernel 6.12+ detected, installing scx-utils..."
+        install_packages scx-utils || true
+    fi
+
+    # 32-bit libraries
     install_packages \
         wine.i686 \
         gnutls.i686 \
@@ -1015,28 +1025,22 @@ install_fedora_gaming_packages() {
         ncurses-libs.i686 \
         vulkan-loader.i686 || true
     
-    # Configure Wine with Winetricks
+    # Configure Wine
     if command_exists winetricks; then
         print_info "Configuring Wine with Winetricks..."
-        run_winetricks_as_user corefonts dxvk vcrun2019 || \
-            print_warning "Winetricks configuration failed (run manually as user)"
+        run_winetricks_as_user corefonts dxvk vcrun2019 || true
     fi
     
-    # Optional packages
-    install_packages vkBasalt || print_info "vkBasalt not available, skipping"
-    install_packages obs-studio || print_info "obs-studio not available, skipping"
-    
-    # Install ProtonUp-Qt
     install_protonupqt
 }
 
 install_arch_gaming_packages() {
     print_section "📦 Installing Gaming Packages (Arch Linux)"
     
-    # Update system first to get latest packages
+    # Update system
     pacman -Sy
     
-    # Core gaming packages with Wine Gecko and Mono for browser/game compatibility
+    # Core gaming packages
     install_packages \
         wine \
         wine-gecko \
@@ -1058,11 +1062,20 @@ install_arch_gaming_packages() {
         vkBasalt \
         lib32-vkBasalt \
         obs-studio \
+        obs-vkcapture \
+        input-remapper \
         discord \
         xpadneo-dkms \
         joystick
     
-    # Additional 32-bit libraries for better game compatibility
+    # Sched-ext support (scx)
+    local k_ver=$(uname -r | cut -d- -f1)
+    if version_gt "$k_ver" "6.12"; then
+        print_info "Kernel 6.12+ detected, installing scx-utils..."
+        install_packages scx-utils || true
+    fi
+
+    # 32-bit libraries
     install_packages \
         lib32-gnutls \
         lib32-libx11 \
@@ -1077,22 +1090,17 @@ install_arch_gaming_packages() {
         lib32-dbus \
         lib32-ncurses || true
     
-    # Configure Wine with essential Winetricks components
+    # Configure Wine
     if command_exists winetricks; then
         print_info "Configuring Wine with Winetricks..."
-        run_winetricks_as_user corefonts dxvk vcrun2019 || \
-            print_warning "Winetricks configuration failed (run manually as user)"
+        run_winetricks_as_user corefonts dxvk vcrun2019 || true
     fi
     
-    # Install from AUR if helper available
+    # AUR helper
     if command_exists yay || command_exists paru; then
         local aur_helper=$(command_exists yay && echo "yay" || echo "paru")
-        print_info "Installing AUR packages with $aur_helper..."
-        
         if ! package_installed protonup-qt; then
             $aur_helper -S --noconfirm protonup-qt || install_protonupqt
-        else
-            print_info "protonup-qt already installed"
         fi
     else
         install_protonupqt
@@ -1102,15 +1110,14 @@ install_arch_gaming_packages() {
 install_suse_gaming_packages() {
     print_section "📦 Installing Gaming Packages (openSUSE)"
     
-    # Enable Packman repository if not already
+    # Enable Packman
     if ! zypper repos | grep -q packman; then
         print_info "Adding Packman repository..."
         zypper addrepo -f https://ftp.gwdg.de/pub/linux/misc/packman/suse/openSUSE_Tumbleweed/ packman
     fi
     
-    print_info "Refreshing repositories and checking for updates..."
     zypper refresh
-    zypper dup --from packman --allow-vendor-change -y 2>/dev/null || true
+    zypper dup --from packman --allow-vendor-change -y || true
     
     # Core gaming packages
     install_packages \
@@ -1121,11 +1128,19 @@ install_suse_gaming_packages() {
         steam \
         lutris \
         vulkan-tools \
-        Mesa-demo-x
+        Mesa-demo-x \
+        input-remapper \
+        gamescope
     
+    # Sched-ext support (scx)
+    local k_ver=$(uname -r | cut -d- -f1)
+    if version_gt "$k_ver" "6.12"; then
+        print_info "Kernel 6.12+ detected, installing scx-utils..."
+        install_packages scx-utils || true
+    fi
+
     # Optional packages
-    install_packages corectrl || print_info "corectrl not available, skipping"
-    install_packages gamescope || print_info "gamescope not available, skipping"
+    install_packages corectrl || true
     
     install_protonupqt
 }
@@ -1177,6 +1192,20 @@ EOF
     else
         print_warning "Could not download ProtonUp-Qt"
     fi
+}
+
+install_decky_loader() {
+    print_section "🎮 Installing Decky Loader (for Handhelds)"
+    
+    if [ -d "/home/${SUDO_USER:-$USER}/homebrew/services" ]; then
+        print_info "Decky Loader already appears to be installed"
+        return
+    fi
+    
+    print_info "Downloading and installing Decky Loader..."
+    curl -L https://github.com/SteamDeckHomebrew/decky-installer/releases/latest/download/install.sh | sh
+    
+    print_success "Decky Loader installation attempted"
 }
 
 # ============================================================================
@@ -1358,13 +1387,13 @@ EOF
 # ============================================================================
 
 apply_sysctl_optimizations() {
-    print_section "⚙️ Applying Kernel System Optimizations"
+    print_section "⚙️ Applying Kernel System Optimizations (2026 Standards)"
     
     backup_file /etc/sysctl.conf
     
     # Create gaming optimization file
     cat > /etc/sysctl.d/99-gaming.conf << 'EOF'
-# Linux Gaming Toolkit - System Optimizations
+# Linux Gaming Toolkit - System Optimizations (v3.6)
 # ============================================
 
 # Virtual Memory Optimizations
@@ -1374,6 +1403,12 @@ vm.dirty_ratio=10
 vm.dirty_background_ratio=5
 vm.page-cluster=3
 vm.zone_reclaim_mode=0
+
+# Critical for modern AAA games (2025-2026)
+vm.max_map_count=2147483642
+
+# MGLRU - Multi-Gen LRU (improves performance under memory pressure)
+vm.lru_gen.enabled=y
 
 # Network Optimizations for Gaming
 net.core.rmem_max=134217728
@@ -1402,14 +1437,85 @@ kernel.sched_autogroup_enabled=0
 # Disable NMI watchdog for lower latency
 kernel.nmi_watchdog=0
 
-# Intel GPU specific optimization (if applicable)
+# Intel GPU specific optimization
 kernel.split_lock_mitigate=0
+
+# Transparent Hugepages (THP) - set to madvise or always for better performance
+# echo always > /sys/kernel/mm/transparent_hugepage/enabled
 EOF
+
+    # Kernel version specific tweaks
+    local k_ver=$(uname -r | cut -d- -f1)
+    if version_gt "$k_ver" "6.14"; then
+        print_info "Kernel 6.14+ detected, enabling ntsync support..."
+        echo "kernel.ntsync.enabled=1" >> /etc/sysctl.d/99-gaming.conf 2>/dev/null || true
+    fi
     
     # Apply settings
     sysctl -p /etc/sysctl.d/99-gaming.conf
     
     print_success "System optimizations applied"
+}
+
+setup_zram() {
+    print_section "💾 Setting up ZRAM (Compressed RAM Swap)"
+    
+    local total_ram=$(free -m | awk '/^Mem:/{print $2}')
+    if [ "$total_ram" -gt 16384 ]; then
+        print_info "System has >16GB RAM ($((total_ram/1024))GB). ZRAM optional but recommended."
+    fi
+
+    case "$DISTRO_FAMILY" in
+        debian)
+            install_packages zram-tools
+            cat > /etc/default/zramswap << 'EOF'
+ALGO=zstd
+PERCENT=50
+PRIORITY=100
+EOF
+            systemctl restart zramswap
+            ;;
+        fedora)
+            install_packages zram-generator
+            cat > /usr/lib/systemd/zram-generator.conf << 'EOF'
+[zram0]
+zram-size = min(ram / 2, 4096)
+compression-algorithm = zstd
+EOF
+            systemctl daemon-reload
+            systemctl start /dev/zram0
+            ;;
+        arch)
+            install_packages zram-generator
+            cat > /etc/systemd/zram-generator.conf << 'EOF'
+[zram0]
+zram-size = min(ram / 2, 4096)
+compression-algorithm = zstd
+EOF
+            systemctl daemon-reload
+            systemctl start /dev/zram0
+            ;;
+        suse)
+            install_packages zram-generator || true
+            ;;
+    esac
+    
+    print_success "ZRAM configured"
+}
+
+setup_power_profiles() {
+    print_section "🔋 Setting up Power Profiles"
+    
+    install_packages power-profiles-daemon
+    systemctl enable --now power-profiles-daemon 2>/dev/null || true
+    
+    if $IS_HANDHELD; then
+        print_info "Handheld detected, setting power profile to balanced-performance..."
+        powerprofilesctl set balanced 2>/dev/null || true
+    else
+        print_info "Setting power profile to performance..."
+        powerprofilesctl set performance 2>/dev/null || true
+    fi
 }
 
 configure_cpu_governor() {
@@ -3468,6 +3574,14 @@ install_additional_tools() {
     # Install itch.io
     install_itch_io
     
+    # Install Heroic Games Launcher
+    if command_exists flatpak; then
+        if ! flatpak list 2>/dev/null | grep -q heroic; then
+            print_info "Installing Heroic Games Launcher via Flatpak..."
+            flatpak install -y flathub com.heroicgameslauncher.hgl 2>/dev/null || true
+        fi
+    fi
+    
     # Install Bottles
     install_bottles
     
@@ -3810,32 +3924,21 @@ show_whiptail_menu() {
     fi
     
     local choice
-    choice=$(whiptail --title "Linux Gaming Toolkit v3.5" --menu "Select action 🕹️" 28 76 22 \
+    choice=$(whiptail --title "Linux Gaming Toolkit v3.6" --menu "Select action 🕹️" 28 76 22 \
         "1" "🚀 Full Gaming Setup (Recommended)" \
         "2" "📦 Install Gaming Packages Only" \
         "3" "🐧 Install Gaming Kernel" \
         "4" "🎨 Install GPU Drivers" \
         "5" "⚙️ Apply System Optimizations Only" \
-        "6" "🔥 Configure CPU Governor" \
-        "7" "⚠️ Disable CPU Mitigations (Security Risk)" \
-        "8" "📊 Configure MangoHud" \
-        "9" "🎲 Configure GameMode" \
-        "10" "🛠️ Install Additional Tools (Discord, itch.io)" \
-        "11" "🌐 Check for Latest Drivers Online" \
-        "12" "🌈 Install HDR & Dolby Vision Support" \
-        "13" "🖥️ Install OLED Protection Tools" \
-        "14" "🎮 Install Nobara Extra Features" \
-        "15" "🔧 Configure Advanced Graphics" \
-        "16" "⚡ Install scx_lavd Gaming Scheduler" \
-        "17" "🎮 Configure Gamescope (FSR/HDR/VRR)" \
-        "18" "🍷 Install Proton-GE" \
-        "19" "⚡ Install LatencyFleX" \
-        "20" "🎮 Install Handheld/Deck Tools" \
-        "21" "🔊 Install Advanced Audio (EasyEffects)" \
-        "22" "💾 Install Game Save Backup" \
-        "23" "📺 Install Overlays (OBS/ReplaySorcery)" \
-        "24" "🍷 Install Protontricks" \
-        "25" "🛡️ Anti-Cheat Info" \
+        "6" "💾 Setup ZRAM (Recommended)" \
+        "7" "🔋 Setup Power Profiles (Performance)" \
+        "8" "🔥 Configure CPU Governor" \
+        "9" "⚠️ Disable CPU Mitigations (Security Risk)" \
+        "10" "📊 Configure MangoHud" \
+        "11" "🎲 Configure GameMode" \
+        "12" "🛠️ Install Additional Tools (Discord, Heroic, itch.io)" \
+        "13" "🌐 Check for Latest Drivers Online" \
+        "14" "🎮 Install Handheld/Deck Tools (Decky)" \
         "0" "🚪 Exit" 3>&1 1>&2 2>&3)
     
     echo "$choice"
@@ -3848,6 +3951,7 @@ show_menu() {
     echo "Detected: $DISTRO_NAME ($DISTRO_FAMILY)"
     echo "Architecture: $ARCH"
     echo "GPU: $GPU_VENDOR"
+    if $IS_HANDHELD; then echo "Device: Handheld"; fi
     if $USE_WHIPTAIL; then
         echo "UI: Whiptail GUI available"
     else
@@ -3864,24 +3968,15 @@ show_menu() {
     echo "  3) 🐧 Install Gaming Kernel"
     echo "  4) 🎨 Install GPU Drivers"
     echo "  5) ⚙️ Apply System Optimizations Only"
-    echo "  6) 🔥 Configure CPU Governor"
-    echo "  7) ⚠️ Disable CPU Mitigations (Security Risk)"
-    echo "  8) 📊 Configure MangoHud"
-    echo "  9) 🎲 Configure GameMode"
-    echo " 10) 🛠️ Install Additional Tools (Discord, itch.io, VKD3D)"
-    echo " 11) 🌐 Check for Latest Drivers Online"
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════════"
-    echo "         ADVANCED FEATURES (Nobara-Style)                          "
-    echo "═══════════════════════════════════════════════════════════════════"
-    echo ""
-    echo " 12) 🌈 Install HDR & Dolby Vision Support"
-    echo " 13) 🖥️ Install OLED Protection Tools"
-    echo " 14) 🎮 Install Nobara Extra Features"
-    echo " 15) 🔧 Configure Advanced Graphics"
-    echo ""
-    echo "═══════════════════════════════════════════════════════════════════"
-    echo ""
+    echo "  6) 💾 Setup ZRAM"
+    echo "  7) 🔋 Setup Power Profiles"
+    echo "  8) 🔥 Configure CPU Governor"
+    echo "  9) ⚠️ Disable CPU Mitigations (Security Risk)"
+    echo " 10) 📊 Configure MangoHud"
+    echo " 11) 🎲 Configure GameMode"
+    echo " 12) 🛠️ Install Additional Tools (Discord, Heroic, itch.io)"
+    echo " 13) 🌐 Check for Latest Drivers Online"
+    echo " 14) 🎮 Install Handheld/Deck Tools"
     echo "  0) 🚪 Exit"
     echo ""
     echo "═══════════════════════════════════════════════════════════════════"
@@ -3889,7 +3984,10 @@ show_menu() {
 }
 
 full_setup() {
-    print_section "🚀 Starting Full Gaming Setup"
+    print_section "🚀 Starting Full Gaming Setup (v3.6)"
+    
+    # Pre-checks
+    detect_handheld
     
     update_system
     enable_multilib
@@ -3913,6 +4011,8 @@ full_setup() {
     fi
     
     apply_sysctl_optimizations
+    setup_zram
+    setup_power_profiles
     configure_cpu_governor
     optimize_io_scheduler
     configure_gamemode
@@ -3920,6 +4020,11 @@ full_setup() {
     configure_steam
     configure_gamescope
     install_additional_tools
+    
+    if $IS_HANDHELD; then
+        install_decky_loader
+    fi
+    
     create_user_helpers
     create_documentation
     
@@ -3989,7 +4094,7 @@ main() {
             fi
         else
             show_menu
-            read -p "Enter your choice [0-15]: " choice
+            read -p "Enter your choice [0-14]: " choice
         fi
         
         case "$choice" in
@@ -4011,88 +4116,42 @@ main() {
                 ;;
             5)
                 apply_sysctl_optimizations
-                configure_cpu_governor
-                optimize_io_scheduler
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             6)
-                configure_cpu_governor
+                setup_zram
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             7)
-                disable_cpu_mitigations
+                setup_power_profiles
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             8)
-                configure_mangohud
+                configure_cpu_governor
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             9)
-                configure_gamemode
+                disable_cpu_mitigations
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             10)
-                install_additional_tools
+                configure_mangohud
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             11)
-                check_latest_drivers_online
+                configure_gamemode
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             12)
-                install_hdr_support
+                install_additional_tools
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             13)
-                install_oled_protection
+                check_latest_drivers_online
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             14)
-                install_nobara_extras
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            15)
-                configure_advanced_graphics
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            16)
-                install_scx_scheduler
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            17)
-                configure_gamescope_advanced
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            18)
-                install_proton_ge
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            19)
-                install_latencyflex
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            20)
-                install_handheld_tools
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            21)
-                install_advanced_audio
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            22)
-                install_game_backup_tools
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            23)
-                install_gaming_overlays
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            24)
-                install_protontricks
-                read -p "Press Enter to continue..." </dev/tty
-                ;;
-            25)
-                show_anticheat_info
+                install_decky_loader
                 read -p "Press Enter to continue..." </dev/tty
                 ;;
             0|""|*)

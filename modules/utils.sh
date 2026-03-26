@@ -25,7 +25,7 @@ print_header() {
     echo -e "${CYAN}"
     echo "╔════════════════════════════════════════════════════════════════════╗"
     echo "║                                                                    ║"
-    echo "║          🎮  LINUX GAMING TOOLKIT - ULTIMATE EDITION              ║"
+    echo "║          🎮  LINUX GAMING TOOLKIT - VERSION 3.6                   ║"
     echo "║                                                                    ║"
     echo "║     Transform any Linux distro into a Gaming Powerhouse           ║"
     echo "║                                                                    ║"
@@ -115,3 +115,6 @@ run_winetricks_as_user() {
     
     return 0
 }
+
+# Version comparison
+version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
