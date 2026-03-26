@@ -1,8 +1,6 @@
-![Banner](banner.png)
 
 # 🎮 Linux Gaming Toolkit
 
-<img src="logo.png" width="120" align="right">
 
 > Transform any Linux distribution into a gaming powerhouse
 
